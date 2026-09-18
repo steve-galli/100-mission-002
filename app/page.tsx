@@ -15,6 +15,8 @@ import {
   calculateWeeklyStrain,
   strainLabel,
   generateSuggestions,
+  decodePolyline,
+  pointsToSvgPath,
 } from "@/lib/strava";
 
 const DAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
@@ -38,6 +40,35 @@ function isFuture(date: Date) {
   return date > now;
 }
 
+function RouteBackground({ polyline, color }: { polyline: string; color: string }) {
+  const points = decodePolyline(polyline);
+  const path = pointsToSvgPath(points, 300, 180, 12);
+  if (!path) return null;
+  return (
+    <svg
+      viewBox="0 0 300 180"
+      preserveAspectRatio="xMidYMid meet"
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+        opacity: 0.28,
+      }}
+    >
+      <path
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function ActivityCard({ activity, index }: { activity: StravaActivity; index: number }) {
   const color = getSportColor(activity.sport_type || activity.type);
   const emoji = getSportEmoji(activity.sport_type || activity.type);
@@ -57,6 +88,8 @@ function ActivityCard({ activity, index }: { activity: StravaActivity; index: nu
         marginBottom: 6,
         transition: "transform 0.15s ease-out, box-shadow 0.15s ease-out",
         cursor: "default",
+        position: "relative",
+        overflow: "hidden",
       }}
       onMouseEnter={e => {
         (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
@@ -67,6 +100,10 @@ function ActivityCard({ activity, index }: { activity: StravaActivity; index: nu
         (e.currentTarget as HTMLElement).style.boxShadow = "";
       }}
     >
+      {activity.map?.summary_polyline && (
+        <RouteBackground polyline={activity.map.summary_polyline} color={color} />
+      )}
+
       {/* Sport + name */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
         <span style={{ fontSize: 14 }}>{emoji}</span>

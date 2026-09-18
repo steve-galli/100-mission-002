@@ -311,3 +311,51 @@ export const SPORT_COLOR: Record<string, string> = {
 export function getSportColor(type: string): string {
   return SPORT_COLOR[type] ?? "#fc5200";
 }
+
+// Decode a Google Encoded Polyline string into [lat, lng] pairs
+export function decodePolyline(encoded: string): [number, number][] {
+  const points: [number, number][] = [];
+  let index = 0, lat = 0, lng = 0;
+
+  while (index < encoded.length) {
+    let result = 0, shift = 0, b: number;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+
+    result = 0; shift = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+
+    points.push([lat / 1e5, lng / 1e5]);
+  }
+  return points;
+}
+
+// Normalise lat/lng points into an SVG path string fitting a given viewBox
+export function pointsToSvgPath(points: [number, number][], vw: number, vh: number, pad = 10): string {
+  if (points.length < 2) return "";
+  const lats = points.map(p => p[0]);
+  const lngs = points.map(p => p[1]);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const latR = maxLat - minLat || 1;
+  const lngR = maxLng - minLng || 1;
+  const scale = Math.min((vw - pad * 2) / lngR, (vh - pad * 2) / latR);
+  const ox = (vw - lngR * scale) / 2;
+  const oy = (vh - latR * scale) / 2;
+  return points
+    .map(([lat, lng], i) => {
+      const x = (lng - minLng) * scale + ox;
+      const y = (maxLat - lat) * scale + oy;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
