@@ -167,6 +167,52 @@ export function getSportEmoji(type: string): string {
   return SPORT_EMOJI[type] ?? "⚡";
 }
 
+// Whoop-style weekly strain score (0–21 scale)
+// Based on moving time × sport intensity × suffer score boost × elevation bonus
+const SPORT_LOAD: Record<string, number> = {
+  Run: 8.5, TrailRun: 9.5, VirtualRun: 8,
+  Ride: 6, VirtualRide: 5.5, EBikeRide: 4, GravelRide: 7, MountainBikeRide: 7.5,
+  Swim: 7.5, OpenWaterSwim: 8.5,
+  Walk: 2.5, Hike: 4,
+  WeightTraining: 5.5, Workout: 6.5, CrossFit: 9, Yoga: 2,
+};
+
+export function calculateWeeklyStrain(activities: StravaActivity[]): number {
+  let totalLoad = 0;
+
+  activities.forEach((a) => {
+    const type = a.sport_type || a.type;
+    const baseLoad = SPORT_LOAD[type] ?? 5;
+    const hours = a.moving_time / 3600;
+    let load = hours * baseLoad;
+
+    // Suffer score boosts intensity estimate (0-100+ → up to +40% load)
+    if (a.suffer_score && a.suffer_score > 0) {
+      load *= Math.min(1.4, 1 + a.suffer_score / 250);
+    }
+
+    // Elevation adds load for runs and rides (per 500m elev ≈ +8%)
+    if (a.total_elevation_gain > 50) {
+      load *= 1 + Math.min(0.4, a.total_elevation_gain / 5000);
+    }
+
+    totalLoad += load;
+  });
+
+  // Calibration: HONC 41 week (6h MTB epic + 2h group ride + swim/yoga) → ~18.5 STRENUOUS.
+  // ALL OUT (21) reserved for a full race week with daily hard sessions.
+  const MAX_LOAD = 100;
+  return Math.min(21, Math.round((totalLoad / MAX_LOAD) * 21 * 10) / 10);
+}
+
+export function strainLabel(score: number): { label: string; color: string } {
+  if (score < 8)  return { label: "RECOVERY",  color: "#129398" };
+  if (score < 12) return { label: "LIGHT",     color: "#004ca6" };
+  if (score < 15) return { label: "MODERATE",  color: "#fdb999" };
+  if (score < 18) return { label: "STRENUOUS", color: "#fc5200" };
+  return               { label: "ALL OUT",    color: "#df2626" };
+}
+
 export const SPORT_COLOR: Record<string, string> = {
   Run: "#fc5200",
   TrailRun: "#fc5200",

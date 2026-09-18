@@ -12,6 +12,8 @@ import {
   getSportEmoji,
   getSportColor,
   getWeekRange,
+  calculateWeeklyStrain,
+  strainLabel,
 } from "@/lib/strava";
 
 const DAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
@@ -212,11 +214,88 @@ function DayColumn({
   );
 }
 
+function StrainGauge({ score }: { score: number }) {
+  const { label, color } = strainLabel(score);
+  const radius = 34;
+  const stroke = 5;
+  const normalizedRadius = radius - stroke;
+  const circumference = 2 * Math.PI * normalizedRadius;
+  const progress = Math.min(score / 21, 1);
+  const dashOffset = circumference * (1 - progress);
+  // Arc starts at top (−90°), goes clockwise
+  const rotation = -90;
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      {/* Divider */}
+      <div style={{ width: 1, height: 52, background: "var(--color-border)", flexShrink: 0 }} />
+
+      <div style={{ position: "relative", width: radius * 2, height: radius * 2, flexShrink: 0 }}>
+        <svg width={radius * 2} height={radius * 2}>
+          {/* Track */}
+          <circle
+            cx={radius} cy={radius} r={normalizedRadius}
+            fill="none" stroke="var(--color-surface-2)" strokeWidth={stroke}
+          />
+          {/* Progress arc */}
+          <circle
+            cx={radius} cy={radius} r={normalizedRadius}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            transform={`rotate(${rotation} ${radius} ${radius})`}
+            style={{ transition: "stroke-dashoffset 0.6s ease-out, stroke 0.4s ease" }}
+          />
+        </svg>
+        {/* Score in centre */}
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          gap: 0,
+        }}>
+          <span style={{
+            fontFamily: "var(--font-display)", fontWeight: 700,
+            fontSize: score >= 10 ? 16 : 18, color,
+            lineHeight: 1,
+          }}>
+            {score.toFixed(1)}
+          </span>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 9, color: "var(--color-text-dim)", fontFamily: "var(--font-ui)", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>
+          WEEKLY STRAIN
+        </div>
+        <div style={{ fontSize: 13, color, fontFamily: "var(--font-display)", fontWeight: 700, letterSpacing: "0.04em" }}>
+          {label}
+        </div>
+        <div style={{ marginTop: 4, width: 80, height: 3, background: "var(--color-surface-2)", borderRadius: 2, overflow: "hidden" }}>
+          <div style={{
+            width: `${progress * 100}%`, height: "100%",
+            background: color, borderRadius: 2,
+            transition: "width 0.6s ease-out",
+          }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
+          <span style={{ fontSize: 8, color: "var(--color-text-dim)", fontFamily: "var(--font-ui)" }}>0</span>
+          <span style={{ fontSize: 8, color: "var(--color-text-dim)", fontFamily: "var(--font-ui)" }}>21</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WeekSummary({ activities }: { activities: StravaActivity[] }) {
   const totalDist = activities.reduce((s, a) => s + a.distance, 0);
   const totalTime = activities.reduce((s, a) => s + a.moving_time, 0);
   const totalElev = activities.reduce((s, a) => s + a.total_elevation_gain, 0);
   const activeDays = new Set(activities.map(a => a.start_date_local.slice(0, 10))).size;
+  const strain = calculateWeeklyStrain(activities);
 
   const sports: Record<string, number> = {};
   activities.forEach(a => {
@@ -231,18 +310,22 @@ function WeekSummary({ activities }: { activities: StravaActivity[] }) {
       borderRadius: 8,
       padding: "14px 20px",
       display: "flex",
-      gap: 32,
+      gap: 28,
       alignItems: "center",
       flexWrap: "wrap",
+      justifyContent: "space-between",
     }}>
-      <SummaryItem label="ACTIVITIES" value={activities.length.toString()} accent />
-      <SummaryItem label="ACTIVE DAYS" value={activeDays.toString()} />
-      {totalDist > 0 && <SummaryItem label="TOTAL DIST" value={`${(totalDist / 1000).toFixed(1)}km`} />}
-      <SummaryItem label="TOTAL TIME" value={formatTime(totalTime)} />
-      {totalElev > 0 && <SummaryItem label="ELEVATION" value={`${Math.round(totalElev)}m`} />}
-      {Object.entries(sports).map(([type, count]) => (
-        <SummaryItem key={type} label={type.toUpperCase()} value={`${getSportEmoji(type)} ×${count}`} />
-      ))}
+      <div style={{ display: "flex", gap: 28, alignItems: "center", flexWrap: "wrap" }}>
+        <SummaryItem label="ACTIVITIES" value={activities.length.toString()} accent />
+        <SummaryItem label="ACTIVE DAYS" value={activeDays.toString()} />
+        {totalDist > 0 && <SummaryItem label="TOTAL DIST" value={`${(totalDist / 1000).toFixed(1)}km`} />}
+        <SummaryItem label="TOTAL TIME" value={formatTime(totalTime)} />
+        {totalElev > 0 && <SummaryItem label="ELEVATION" value={`${Math.round(totalElev)}m`} />}
+        {Object.entries(sports).map(([type, count]) => (
+          <SummaryItem key={type} label={type.toUpperCase()} value={`${getSportEmoji(type)} ×${count}`} />
+        ))}
+      </div>
+      <StrainGauge score={strain} />
     </div>
   );
 }
@@ -589,7 +672,8 @@ export default function Home() {
             alignItems: "start",
           }}>
             {days.map((date, i) => {
-              const key = date.toISOString().slice(0, 10);
+              // Use local date parts to avoid UTC offset shifting the day (e.g. BST midnight → UTC previous day)
+              const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
               return (
                 <DayColumn
                   key={key}
