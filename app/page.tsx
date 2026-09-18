@@ -14,6 +14,7 @@ import {
   getWeekRange,
   calculateWeeklyStrain,
   strainLabel,
+  generateSuggestions,
 } from "@/lib/strava";
 
 const DAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
@@ -210,6 +211,55 @@ function DayColumn({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function SuggestionRow({ activities, strain }: { activities: StravaActivity[]; strain: number }) {
+  const suggestions = generateSuggestions(activities, strain);
+  if (suggestions.length === 0) return null;
+
+  const priorityColor: Record<string, string> = {
+    high: "var(--color-orange)",
+    medium: "#fdb999",
+    low: "var(--color-text-muted)",
+  };
+
+  return (
+    <div style={{
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap",
+    }}>
+      {suggestions.map((s, i) => (
+        <div
+          key={i}
+          className="animate-fade-up"
+          style={{
+            animationDelay: `${i * 80}ms`,
+            opacity: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: "var(--color-surface)",
+            border: `1px solid var(--color-border)`,
+            borderLeft: `3px solid ${priorityColor[s.priority]}`,
+            borderRadius: 6,
+            padding: "8px 14px",
+            flex: "1 1 200px",
+          }}
+        >
+          <span style={{ fontSize: 15, flexShrink: 0 }}>{s.icon}</span>
+          <span style={{
+            fontFamily: "var(--font-ui)",
+            fontSize: 12,
+            color: "var(--color-text-primary)",
+            lineHeight: 1.4,
+          }}>
+            {s.text}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -638,10 +688,11 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Weekly summary */}
+        {/* Weekly summary + suggestions */}
         {!loading && activities.length > 0 && (
-          <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
             <WeekSummary activities={activities} />
+            <SuggestionRow activities={activities} strain={calculateWeeklyStrain(activities)} />
           </div>
         )}
 

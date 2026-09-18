@@ -205,6 +205,84 @@ export function calculateWeeklyStrain(activities: StravaActivity[]): number {
   return Math.min(21, Math.round((totalLoad / MAX_LOAD) * 21 * 10) / 10);
 }
 
+export interface Suggestion {
+  icon: string;
+  text: string;
+  priority: "high" | "medium" | "low";
+}
+
+export function generateSuggestions(activities: StravaActivity[], strain: number): Suggestion[] {
+  const suggestions: Suggestion[] = [];
+
+  const types = activities.map(a => a.sport_type || a.type);
+  const totalElev = activities.reduce((s, a) => s + a.total_elevation_gain, 0);
+
+  const hasStrength = types.some(t => ["WeightTraining", "CrossFit", "Workout"].includes(t));
+  const hasYoga     = types.some(t => ["Yoga", "Pilates"].includes(t));
+  const hasSwim     = types.some(t => ["Swim", "OpenWaterSwim"].includes(t));
+  const hasRun      = types.some(t => ["Run", "TrailRun", "VirtualRun"].includes(t));
+  const hasRide     = types.some(t => ["Ride", "VirtualRide", "MountainBikeRide", "GravelRide", "EBikeRide"].includes(t));
+
+  const hasEpicEffort  = activities.some(a => a.moving_time > 14400);  // 4h+
+  const hasBigEffort   = activities.some(a => a.moving_time > 7200);   // 2h+
+
+  // Back-to-back hard days
+  const activeDates = [...new Set(activities.map(a => a.start_date_local.slice(0, 10)))].sort();
+  const backToBack = activeDates.some((d, i) => {
+    if (i === 0) return false;
+    return (new Date(d).getTime() - new Date(activeDates[i - 1]).getTime()) === 86400000;
+  });
+
+  // Rest days
+  if (strain >= 18) {
+    suggestions.push({ icon: "🛌", text: "Take 2 full rest days before your next hard session", priority: "high" });
+  } else if (strain >= 14) {
+    suggestions.push({ icon: "😴", text: "Schedule 1 rest day before your next intense effort", priority: "high" });
+  }
+
+  // Epic effort recovery
+  if (hasEpicEffort) {
+    suggestions.push({ icon: "🦵", text: "Allow 48–72h for legs to recover from your long ride", priority: "high" });
+  } else if (hasBigEffort) {
+    suggestions.push({ icon: "⏸️", text: "24h easy recovery before your next hard session", priority: "medium" });
+  }
+
+  // High elevation → yoga/stretching
+  if (totalElev > 1500 && !hasYoga) {
+    suggestions.push({ icon: "🧘", text: "Yoga or stretching recommended after this much climbing", priority: "medium" });
+  } else if (hasBigEffort && !hasYoga) {
+    suggestions.push({ icon: "🧘", text: "Add a yoga session to support recovery", priority: "low" });
+  }
+
+  // Strength gap
+  if (!hasStrength) {
+    suggestions.push({ icon: "🏋️", text: "Add 1 strength session next week to build resilience", priority: "medium" });
+  }
+
+  // Back-to-back without recovery
+  if (backToBack && strain >= 14) {
+    suggestions.push({ icon: "🔄", text: "Add an easy active recovery day between hard efforts", priority: "medium" });
+  }
+
+  // Swimming as recovery
+  if (!hasSwim && strain >= 14) {
+    suggestions.push({ icon: "🏊", text: "A recovery swim is ideal after a high-strain week", priority: "low" });
+  }
+
+  // Cross-training
+  if (hasRide && !hasRun && strain < 16) {
+    suggestions.push({ icon: "🏃", text: "Mix in a short run to work different muscle groups", priority: "low" });
+  }
+
+  // Low strain nudge
+  if (strain < 8 && activities.length > 0) {
+    suggestions.push({ icon: "📈", text: "Low strain this week — room to increase intensity", priority: "low" });
+  }
+
+  const order = { high: 0, medium: 1, low: 2 };
+  return suggestions.sort((a, b) => order[a.priority] - order[b.priority]).slice(0, 3);
+}
+
 export function strainLabel(score: number): { label: string; color: string } {
   if (score < 8)  return { label: "RECOVERY",  color: "#129398" };
   if (score < 12) return { label: "LIGHT",     color: "#004ca6" };
