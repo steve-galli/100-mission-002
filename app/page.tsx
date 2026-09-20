@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronLeft, ChevronRight, LogOut, RefreshCw, User, Settings, Bike, TrendingUp, X, Zap } from "lucide-react";
 import gsap from "gsap";
@@ -78,9 +78,12 @@ function Panel({ title, onClose, children }: { title: string; onClose: () => voi
   }, [handleClose]);
 
   useEffect(() => {
-    if (prefersReducedMotion || !panelRef.current || !backdropRef.current) return;
+    if (prefersReducedMotion || !panelRef.current || !backdropRef.current) {
+      ScrollTrigger.refresh();
+      return;
+    }
     gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2 });
-    gsap.fromTo(panelRef.current, { x: 320 }, { x: 0, duration: 0.3, ease: "power3.out" });
+    gsap.fromTo(panelRef.current, { x: 320 }, { x: 0, duration: 0.3, ease: "power3.out", onComplete: () => ScrollTrigger.refresh() });
   }, []); // eslint-disable-line
 
   return (
@@ -104,7 +107,7 @@ function Panel({ title, onClose, children }: { title: string; onClose: () => voi
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
+        <div className="panel-scroll" style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
           {children}
         </div>
       </div>
@@ -188,6 +191,18 @@ function bikeEmoji(name: string): string {
 }
 
 function BikeGaragePanel({ bikes }: { bikes: SummaryGear[] }) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useGSAP(() => {
+    if (!bikes.length || prefersReducedMotion) return;
+    const scroller = document.querySelector(".panel-scroll") as HTMLElement;
+    if (!scroller) return;
+    gsap.from(".bike-card", {
+      opacity: 0, y: 10, scale: 0.96, stagger: 0.08, duration: 0.4, ease: "power2.out",
+      scrollTrigger: { trigger: listRef.current, scroller, start: "top 90%", once: true },
+    });
+  }, { scope: listRef, dependencies: [bikes.length] });
+
   if (bikes.length === 0) {
     return (
       <div style={{ textAlign: "center", padding: "40px 0", fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-dim)", letterSpacing: "0.06em" }}>
@@ -196,10 +211,11 @@ function BikeGaragePanel({ bikes }: { bikes: SummaryGear[] }) {
     );
   }
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div ref={listRef} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {bikes.map(bike => (
         <div
           key={bike.id}
+          className="bike-card"
           style={{
             background: "var(--color-surface)", border: "1px solid var(--color-border)",
             borderRadius: 8, padding: "14px 16px",
@@ -427,7 +443,7 @@ function DetailRow({ label, value, accent }: { label: string; value: string; acc
 
 function DetailSection({ label }: { label: string }) {
   return (
-    <div style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "var(--color-text-dim)", marginTop: 20, marginBottom: 4 }}>
+    <div className="detail-section-header" style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "var(--color-text-dim)", marginTop: 20, marginBottom: 4 }}>
       {label}
     </div>
   );
@@ -447,6 +463,8 @@ function ActivityRouteMap({ polyline, color }: { polyline: string; color: string
 function ActivityDetailPanel({ activity, gear }: { activity: StravaActivity; gear?: SummaryGear }) {
   const [detail, setDetail] = useState<DetailedActivity | null>(null);
   const [detailLoading, setDetailLoading] = useState(true);
+  const panelBodyRef = useRef<HTMLDivElement>(null);
+  const triggeredEls = useRef(new WeakSet<Element>());
   const sportType = activity.sport_type || activity.type;
   const color = getSportColor(sportType);
   const emoji = getSportEmoji(sportType);
@@ -458,6 +476,63 @@ function ActivityDetailPanel({ activity, gear }: { activity: StravaActivity; gea
       .then(d => { if (d) setDetail(d); })
       .finally(() => setDetailLoading(false));
   }, [activity.id]);
+
+  // Route map scrub parallax — scrolling the panel moves the map upward slightly
+  useEffect(() => {
+    if (prefersReducedMotion || !panelBodyRef.current) return;
+    const scroller = document.querySelector(".panel-scroll") as HTMLElement;
+    const map = panelBodyRef.current.querySelector(".detail-route-map") as HTMLElement;
+    if (!scroller || !map) return;
+
+    const ctx = gsap.context(() => {
+      gsap.to(map, {
+        y: -18,
+        ease: "none",
+        scrollTrigger: { trigger: map, scroller, start: "top top", end: "+=140", scrub: 1.4 },
+      });
+    });
+    return () => ctx.revert();
+  }, []); // eslint-disable-line
+
+  // Section heading reveals — run on mount + when detail finishes loading (new sections appear)
+  useEffect(() => {
+    if (prefersReducedMotion || !panelBodyRef.current) return;
+    const scroller = document.querySelector(".panel-scroll") as HTMLElement;
+    if (!scroller) return;
+
+    const sections = Array.from(panelBodyRef.current.querySelectorAll(".detail-section-header"));
+    sections.filter(el => !triggeredEls.current.has(el)).forEach(el => {
+      triggeredEls.current.add(el);
+      gsap.from(el, {
+        opacity: 0, y: 5, duration: 0.3, ease: "power2.out",
+        scrollTrigger: { trigger: el, scroller, start: "top 91%", once: true },
+      });
+    });
+
+    // Splits table — rows slide in from left as table scrolls into view
+    const splitsTable = panelBodyRef.current.querySelector(".splits-table") as HTMLElement;
+    if (splitsTable && !triggeredEls.current.has(splitsTable)) {
+      triggeredEls.current.add(splitsTable);
+      const rows = Array.from(splitsTable.querySelectorAll(".split-row"));
+      gsap.from(rows, {
+        opacity: 0, x: -10, stagger: 0.022, duration: 0.28, ease: "power2.out",
+        scrollTrigger: { trigger: splitsTable, scroller, start: "top 92%", once: true },
+      });
+    }
+
+    // Laps table — same treatment
+    const lapsTable = panelBodyRef.current.querySelector(".laps-table") as HTMLElement;
+    if (lapsTable && !triggeredEls.current.has(lapsTable)) {
+      triggeredEls.current.add(lapsTable);
+      const rows = Array.from(lapsTable.querySelectorAll(".lap-row"));
+      gsap.from(rows, {
+        opacity: 0, x: -10, stagger: 0.018, duration: 0.26, ease: "power2.out",
+        scrollTrigger: { trigger: lapsTable, scroller, start: "top 92%", once: true },
+      });
+    }
+
+    ScrollTrigger.refresh();
+  }, [detailLoading]); // eslint-disable-line
 
   const d = detail ?? activity;
   const startDate = new Date(activity.start_date_local);
@@ -471,10 +546,12 @@ function ActivityDetailPanel({ activity, gear }: { activity: StravaActivity; gea
   const isRun  = ["Run", "TrailRun", "VirtualRun"].includes(sportType);
 
   return (
-    <div>
+    <div ref={panelBodyRef}>
       {/* Route map */}
       {activity.map?.summary_polyline && (
-        <ActivityRouteMap polyline={activity.map.summary_polyline} color={color} />
+        <div className="detail-route-map" style={{ overflow: "hidden", borderRadius: 6 }}>
+          <ActivityRouteMap polyline={activity.map.summary_polyline} color={color} />
+        </div>
       )}
 
       {/* Meta */}
@@ -566,7 +643,7 @@ function ActivityDetailPanel({ activity, gear }: { activity: StravaActivity; gea
       {!detailLoading && detail?.splits_metric && detail.splits_metric.length > 0 && (
         <>
           <DetailSection label="KM SPLITS" />
-          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <div className="splits-table" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr", gap: "0 10px", padding: "4px 0", borderBottom: "1px solid var(--color-border)" }}>
               {["KM", "TIME", "PACE", "ELEV"].map(h => (
                 <span key={h} style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, color: "var(--color-text-dim)", letterSpacing: "0.08em" }}>{h}</span>
@@ -577,7 +654,7 @@ function ActivityDetailPanel({ activity, gear }: { activity: StravaActivity; gea
               const pm = Math.floor(splitPaceSecPerKm / 60);
               const ps = Math.round(splitPaceSecPerKm % 60);
               return (
-                <div key={s.split} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr", gap: "0 10px", padding: "6px 0", borderBottom: "1px solid var(--color-border)" }}>
+                <div key={s.split} className="split-row" style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr", gap: "0 10px", padding: "6px 0", borderBottom: "1px solid var(--color-border)" }}>
                   <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, color: "var(--color-text-dim)", fontVariantNumeric: "tabular-nums" }}>{s.split}</span>
                   <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>{formatTime(s.moving_time)}</span>
                   <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-orange)", fontVariantNumeric: "tabular-nums" }}>{pm}:{ps.toString().padStart(2, "0")}</span>
@@ -595,14 +672,14 @@ function ActivityDetailPanel({ activity, gear }: { activity: StravaActivity; gea
       {!detailLoading && detail?.laps && detail.laps.length > 1 && (
         <>
           <DetailSection label="LAPS" />
-          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <div className="laps-table" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
             <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr", gap: "0 10px", padding: "4px 0", borderBottom: "1px solid var(--color-border)" }}>
               {["#", "DIST", "TIME", "SPEED"].map(h => (
                 <span key={h} style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, color: "var(--color-text-dim)", letterSpacing: "0.08em" }}>{h}</span>
               ))}
             </div>
             {detail.laps.map(lap => (
-              <div key={lap.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr", gap: "0 10px", padding: "6px 0", borderBottom: "1px solid var(--color-border)" }}>
+              <div key={lap.id} className="lap-row" style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr", gap: "0 10px", padding: "6px 0", borderBottom: "1px solid var(--color-border)" }}>
                 <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, color: "var(--color-text-dim)", fontVariantNumeric: "tabular-nums" }}>{lap.lap_index}</span>
                 <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>{formatDistance(lap.distance, sportType)}</span>
                 <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>{formatTime(lap.moving_time)}</span>
@@ -830,17 +907,28 @@ function DayColumn({ dayIndex, date, activities, gearMap, onSelect }: {
 /* ── Suggestion row ───────────────────────────────────────────────── */
 function SuggestionRow({ activities, strain }: { activities: StravaActivity[]; strain: number }) {
   const suggestions = generateSuggestions(activities, strain);
-  if (suggestions.length === 0) return null;
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  useGSAP(() => {
+    if (!suggestions.length || prefersReducedMotion) return;
+    gsap.from(".suggestion-chip", {
+      opacity: 0, x: -14, stagger: 0.07, duration: 0.4, ease: "power2.out",
+      scrollTrigger: { trigger: rowRef.current, start: "top 93%", once: true },
+    });
+  }, { scope: rowRef, dependencies: [suggestions.length] });
+
+  if (!suggestions.length) return null;
 
   const priorityColor: Record<string, string> = {
     high: "var(--color-orange)", medium: "#fdb999", low: "var(--color-text-muted)",
   };
 
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div ref={rowRef} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {suggestions.map((s, i) => (
         <div
           key={i}
+          className="suggestion-chip"
           style={{
             display: "flex", alignItems: "center", gap: 8,
             background: "var(--color-surface)",
@@ -880,9 +968,9 @@ function StrainGauge({ score }: { score: number }) {
     }
     tweenRef.current = gsap.to(arcRef.current, {
       strokeDashoffset: target,
-      duration: 0.8,
+      duration: 0.85,
       ease: "back.out(1.2)",
-      delay: 0.15,
+      delay: 0.5,
     });
     return () => { tweenRef.current?.kill(); };
   }, [score, circumference]);
@@ -1119,17 +1207,47 @@ function HomeContent() {
   // Sync directionRef so calendarKey effect always has the latest direction
   useEffect(() => { directionRef.current = direction; }, [direction]);
 
-  // Entrance animation — fires once on first data load
+  // Pre-hide animated elements synchronously before browser paint — eliminates flash
+  useLayoutEffect(() => {
+    if (hasAnimated.current || loading || !activities.length || prefersReducedMotion) return;
+    gsap.set(".nav-logo", { opacity: 0, scale: 0.8 });
+    gsap.set(".nav-title", { opacity: 0, x: -6 });
+    gsap.set(".nav-controls", { opacity: 0, x: 8 });
+    gsap.set(".week-nav-btn", { opacity: 0, scale: 0.88 });
+    gsap.set(".week-headline-word", { opacity: 0, y: 14 });
+    gsap.set(".week-subline", { opacity: 0 });
+    gsap.set(".week-count", { opacity: 0 });
+    if (summaryRef.current) gsap.set(summaryRef.current, { opacity: 0, y: 16 });
+    gsap.set(".summary-item", { opacity: 0, y: 8 });
+    gsap.set(".day-column", { opacity: 0, y: 12 });
+    gsap.set(".activity-card", { opacity: 0, y: 10 });
+  }, [loading, activities.length]); // eslint-disable-line
+
+  // Sequenced entrance animation — fires once on first data load
   useEffect(() => {
     if (hasAnimated.current || loading || !activities.length || prefersReducedMotion) return;
     hasAnimated.current = true;
-    const tl = gsap.timeline();
-    if (navRef.current) tl.fromTo(navRef.current, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" });
-    if (weekHeaderRef.current) tl.fromTo(weekHeaderRef.current, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.2, ease: "power2.out" }, "-=0.1");
-    if (summaryRef.current) tl.fromTo(summaryRef.current, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, "-=0.1");
-    tl.fromTo(".summary-item", { opacity: 0, y: 6 }, { opacity: 1, y: 0, stagger: 0.04, duration: 0.2, ease: "power2.out" }, "-=0.15");
-    tl.fromTo(".day-column", { opacity: 0, y: 10 }, { opacity: 1, y: 0, stagger: 0.035, duration: 0.25, ease: "power2.out" }, "-=0.1");
-    tl.fromTo(".activity-card", { opacity: 0, y: 8 }, { opacity: 1, y: 0, stagger: 0.04, duration: 0.2, ease: "power2.out" }, "-=0.15");
+
+    const tl = gsap.timeline({ defaults: { ease: "power2.out" } });
+
+    // Beat 1 — Nav (0.0s): logo pops, title slides, controls slide from right
+    tl.to(".nav-logo",    { opacity: 1, scale: 1, duration: 0.32, ease: "back.out(2)" }, 0);
+    tl.to(".nav-title",   { opacity: 1, x: 0, duration: 0.28 }, 0.06);
+    tl.to(".nav-controls",{ opacity: 1, x: 0, duration: 0.24 }, 0.1);
+
+    // Beat 2 — Week headline (0.22s): word-by-word stagger, then subline
+    tl.to(".week-nav-btn",      { opacity: 1, scale: 1, stagger: 0.08, duration: 0.22, ease: "back.out(1.5)" }, 0.22);
+    tl.to(".week-headline-word",{ opacity: 1, y: 0, stagger: 0.055, duration: 0.38, ease: "power3.out" }, 0.26);
+    tl.to(".week-subline",      { opacity: 1, duration: 0.22 }, 0.52);
+    tl.to(".week-count",        { opacity: 1, duration: 0.2 }, 0.56);
+
+    // Beat 3 — Summary bar (0.42s): container rises, then items stagger across
+    if (summaryRef.current) tl.to(summaryRef.current, { opacity: 1, y: 0, duration: 0.32 }, 0.42);
+    tl.to(".summary-item", { opacity: 1, y: 0, stagger: 0.048, duration: 0.24 }, 0.54);
+
+    // Beat 4 — Calendar (0.62s): columns land left-to-right, cards follow
+    tl.to(".day-column",   { opacity: 1, y: 0, stagger: 0.042, duration: 0.28 }, 0.62);
+    tl.to(".activity-card",{ opacity: 1, y: 0, stagger: 0.032, duration: 0.22 }, 0.74);
   }, [loading, activities.length]); // eslint-disable-line
 
   // Calendar enter animation on week navigation
@@ -1202,13 +1320,15 @@ function HomeContent() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <StravaIcon size={28} />
-          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 18, color: "var(--color-text-primary)", letterSpacing: "0.02em" }}>
+          <span className="nav-logo" style={{ display: "flex", flexShrink: 0 }}>
+            <StravaIcon size={28} />
+          </span>
+          <span className="nav-title" style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 18, color: "var(--color-text-primary)", letterSpacing: "0.02em" }}>
             STRAVA WEEK
           </span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="nav-controls" style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
             onClick={loadActivities}
             aria-label="Refresh activities"
@@ -1238,17 +1358,25 @@ function HomeContent() {
             <button
               onClick={() => goWeek(-1)}
               aria-label="Previous week"
+              className="week-nav-btn"
               style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)", borderRadius: 6, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
             >
               <ChevronLeft size={16} aria-hidden="true" />
             </button>
 
             <div>
-              <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, color: "var(--color-text-primary)", lineHeight: 1.1, textWrap: "balance" } as React.CSSProperties}>
-                {weekLabel}
+              <h1
+                aria-label={weekLabel}
+                style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, color: "var(--color-text-primary)", lineHeight: 1.1 } as React.CSSProperties}
+              >
+                {weekLabel.split(" ").map((word, i, arr) => (
+                  <span key={`${word}-${i}`} className="week-headline-word" style={{ display: "inline-block" }}>
+                    {word}{i < arr.length - 1 ? " " : ""}
+                  </span>
+                ))}
               </h1>
               {isCurrentWeek && (
-                <div suppressHydrationWarning style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>
+                <div suppressHydrationWarning className="week-subline" style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>
                   {formatWeekLabel(weekStart, weekEnd)}
                 </div>
               )}
@@ -1258,6 +1386,7 @@ function HomeContent() {
               onClick={() => goWeek(1)}
               disabled={weekOffset >= 0}
               aria-label="Next week"
+              className="week-nav-btn"
               style={{
                 background: "var(--color-surface)", border: "1px solid var(--color-border)",
                 color: weekOffset >= 0 ? "var(--color-text-dim)" : "var(--color-text-primary)",
@@ -1285,6 +1414,7 @@ function HomeContent() {
           <div
             aria-live="polite"
             aria-atomic="true"
+            className="week-count"
             style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-dim)", letterSpacing: "0.06em" }}
           >
             {loading ? "LOADING…" : `${activityCount} ACTIVIT${activityCount !== 1 ? "IES" : "Y"}`}
