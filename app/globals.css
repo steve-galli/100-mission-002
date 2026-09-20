@@ -96,44 +96,12 @@ a:focus-visible {
   opacity: 0.88;
 }
 
-/* Activity card hover */
-.activity-card {
-  transition: transform 0.15s ease-out;
-  cursor: default;
-}
-.activity-card:hover {
-  transform: translateY(-1px);
-}
-
-/* Calendar week transitions */
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(20px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-@keyframes slideInLeft {
-  from { opacity: 0; transform: translateX(-20px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-.calendar-enter-forward {
-  animation: slideInRight 0.25s cubic-bezier(0, 1.085, 0.4, 1) forwards;
-}
-.calendar-enter-backward {
-  animation: slideInLeft 0.25s cubic-bezier(0, 1.085, 0.4, 1) forwards;
-}
-
 /* Skeleton pulse */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.5; }
 }
 
-.animate-fade-up {
-  animation: fadeUp 0.3s cubic-bezier(0, 1.085, 0.4, 1) forwards;
-}
 .animate-pulse {
   animation: pulse 2s ease-in-out infinite;
 }

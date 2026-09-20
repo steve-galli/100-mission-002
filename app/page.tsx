@@ -2,7 +2,12 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronLeft, ChevronRight, RefreshCw, User, Settings, Bike, TrendingUp, X, Zap } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, LogOut, RefreshCw, User, Settings, Bike, TrendingUp, X, Zap } from "lucide-react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(useGSAP, ScrollTrigger);
 import {
   StravaActivity,
   StravaAthlete,
@@ -54,30 +59,48 @@ const prefersReducedMotion =
 
 /* ── Panel sheet ──────────────────────────────────────────────────── */
 function Panel({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+
+  const handleClose = useCallback(() => {
+    if (prefersReducedMotion || !panelRef.current || !backdropRef.current) {
+      onClose();
+      return;
+    }
+    gsap.to(panelRef.current, { x: 320, duration: 0.2, ease: "power2.in" });
+    gsap.to(backdropRef.current, { opacity: 0, duration: 0.18, onComplete: onClose });
+  }, [onClose]);
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") handleClose(); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [handleClose]);
+
+  useEffect(() => {
+    if (prefersReducedMotion || !panelRef.current || !backdropRef.current) return;
+    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2 });
+    gsap.fromTo(panelRef.current, { x: 320 }, { x: 0, duration: 0.3, ease: "power3.out" });
+  }, []); // eslint-disable-line
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 300 }} />
+      <div ref={backdropRef} onClick={handleClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 300 }} />
       <div
+        ref={panelRef}
         role="dialog"
         aria-label={title}
         style={{
           position: "fixed", top: 0, right: 0, bottom: 0, width: 320,
           background: "var(--color-bg)", borderLeft: "1px solid var(--color-border)",
           zIndex: 301, display: "flex", flexDirection: "column",
-          animation: "slideInRight 0.2s cubic-bezier(0,1.085,0.4,1)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
           <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.04em", color: "var(--color-text-primary)" }}>
             {title}
           </span>
-          <button onClick={onClose} aria-label="Close" style={{ background: "transparent", border: "none", color: "var(--color-text-dim)", cursor: "pointer", display: "flex", padding: 4 }}>
+          <button onClick={handleClose} aria-label="Close" style={{ background: "transparent", border: "none", color: "var(--color-text-dim)", cursor: "pointer", display: "flex", padding: 4 }}>
             <X size={18} aria-hidden="true" />
           </button>
         </div>
@@ -277,6 +300,7 @@ type PanelId = "profile" | "settings" | "garage" | "progress";
 function ProfileMenu({ athlete, onOpen }: { athlete: StravaAthlete; onOpen: (id: PanelId) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -285,6 +309,19 @@ function ProfileMenu({ athlete, onOpen }: { athlete: StravaAthlete; onOpen: (id:
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !dropdownRef.current || prefersReducedMotion) return;
+    gsap.fromTo(dropdownRef.current,
+      { opacity: 0, scaleY: 0.88, y: -6 },
+      { opacity: 1, scaleY: 1, y: 0, duration: 0.2, ease: "power2.out", transformOrigin: "top right" }
+    );
+    const items = dropdownRef.current.querySelectorAll("button[role='menuitem'], a[role='menuitem']");
+    gsap.fromTo(items,
+      { opacity: 0, y: -4 },
+      { opacity: 1, y: 0, stagger: 0.04, duration: 0.18, ease: "power2.out" }
+    );
   }, [open]);
 
   const items: { id: PanelId; icon: React.ReactNode; label: string }[] = [
@@ -326,6 +363,7 @@ function ProfileMenu({ athlete, onOpen }: { athlete: StravaAthlete; onOpen: (id:
 
       {open && (
         <div
+          ref={dropdownRef}
           role="menu"
           style={{
             position: "absolute", top: "calc(100% + 6px)", right: 0,
@@ -333,7 +371,6 @@ function ProfileMenu({ athlete, onOpen }: { athlete: StravaAthlete; onOpen: (id:
             borderRadius: 8, padding: 4, minWidth: 180,
             boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
             zIndex: 200,
-            animation: "fadeUp 0.15s ease-out forwards",
           }}
         >
           {items.map(item => (
@@ -633,10 +670,8 @@ function ActivityCard({ activity, index, gear, onSelect }: {
       aria-label={`View details for ${activity.name}`}
       onClick={() => onSelect(activity, gear)}
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") onSelect(activity, gear); }}
-      className="activity-card animate-fade-up"
+      className="activity-card"
       style={{
-        animationDelay: `${index * 60}ms`,
-        opacity: 0,
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
         borderRadius: 8,
@@ -751,7 +786,7 @@ function DayColumn({ dayIndex, date, activities, gearMap, onSelect }: {
   const future = isFuture(date);
 
   return (
-    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+    <div className="day-column" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{
         padding: "8px 4px",
         borderBottom: `2px solid ${today ? "var(--color-orange)" : "var(--color-border)"}`,
@@ -806,9 +841,7 @@ function SuggestionRow({ activities, strain }: { activities: StravaActivity[]; s
       {suggestions.map((s, i) => (
         <div
           key={i}
-          className="animate-fade-up"
           style={{
-            animationDelay: `${i * 80}ms`, opacity: 0,
             display: "flex", alignItems: "center", gap: 8,
             background: "var(--color-surface)",
             border: `1px solid var(--color-border)`,
@@ -834,9 +867,25 @@ function StrainGauge({ score }: { score: number }) {
   const stroke = 5;
   const normalizedRadius = radius - stroke;
   const circumference = 2 * Math.PI * normalizedRadius;
-  const progress = Math.min(score / 21, 1);
-  const dashOffset = circumference * (1 - progress);
-  const arcTransition = prefersReducedMotion ? undefined : "stroke-dashoffset 0.6s cubic-bezier(0,1.085,0.4,1), stroke 0.4s ease";
+  const arcRef = useRef<SVGCircleElement>(null);
+  const tweenRef = useRef<gsap.core.Tween | null>(null);
+
+  useEffect(() => {
+    if (!arcRef.current) return;
+    const target = circumference * (1 - Math.min(score / 21, 1));
+    tweenRef.current?.kill();
+    if (prefersReducedMotion) {
+      gsap.set(arcRef.current, { strokeDashoffset: target });
+      return;
+    }
+    tweenRef.current = gsap.to(arcRef.current, {
+      strokeDashoffset: target,
+      duration: 0.8,
+      ease: "back.out(1.2)",
+      delay: 0.15,
+    });
+    return () => { tweenRef.current?.kill(); };
+  }, [score, circumference]);
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -852,11 +901,12 @@ function StrainGauge({ score }: { score: number }) {
         <svg width={radius * 2} height={radius * 2} aria-hidden="true">
           <circle cx={radius} cy={radius} r={normalizedRadius} fill="none" stroke="var(--color-surface-2)" strokeWidth={stroke} />
           <circle
+            ref={arcRef}
             cx={radius} cy={radius} r={normalizedRadius}
             fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
-            strokeDasharray={circumference} strokeDashoffset={dashOffset}
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference}
             transform={`rotate(-90 ${radius} ${radius})`}
-            style={{ transition: arcTransition }}
           />
         </svg>
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -912,7 +962,7 @@ function WeekSummary({ activities }: { activities: StravaActivity[] }) {
 
 function SummaryItem({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div>
+    <div className="summary-item">
       <div style={{ fontSize: 9, color: "var(--color-text-dim)", fontFamily: "var(--font-ui)", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>
         {label}
       </div>
@@ -925,14 +975,55 @@ function SummaryItem({ label, value, accent }: { label: string; value: string; a
 
 /* ── Login screen ─────────────────────────────────────────────────── */
 function LoginScreen({ error }: { error: string | null }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const headline = "STRAVA WEEK";
+
+  useGSAP(() => {
+    if (prefersReducedMotion) return;
+    const tl = gsap.timeline({ delay: 0.1 });
+    tl.fromTo(".login-logo",
+      { opacity: 0, scale: 0.7 },
+      { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.7)" }
+    );
+    tl.fromTo(".login-char",
+      { opacity: 0, y: 20, rotationX: 80 },
+      { opacity: 1, y: 0, rotationX: 0, stagger: 0.028, duration: 0.55, ease: "power3.out" },
+      "-=0.25"
+    );
+    tl.fromTo(".login-subtitle",
+      { opacity: 0, y: 8 },
+      { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" },
+      "-=0.3"
+    );
+    tl.fromTo(".login-cta",
+      { opacity: 0, y: 10, scale: 0.95 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "back.out(1.5)" },
+      "-=0.15"
+    );
+    tl.fromTo(".login-privacy",
+      { opacity: 0 },
+      { opacity: 1, duration: 0.2 },
+      "-=0.1"
+    );
+  }, { scope: containerRef });
+
   return (
-    <div style={{ minHeight: "100vh", background: "var(--color-bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 32, padding: 24 }}>
+    <div ref={containerRef} style={{ minHeight: "100vh", background: "var(--color-bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 32, padding: 24 }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-        <StravaIcon size={48} />
-        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 36, color: "var(--color-text-primary)", letterSpacing: "-0.01em", textWrap: "balance" } as React.CSSProperties}>
-          STRAVA WEEK
+        <div className="login-logo">
+          <StravaIcon size={48} />
+        </div>
+        <h1
+          aria-label={headline}
+          style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 36, color: "var(--color-text-primary)", letterSpacing: "-0.01em", perspective: 400 } as React.CSSProperties}
+        >
+          {headline.split("").map((char, i) => (
+            <span key={i} className="login-char" aria-hidden="true" style={{ display: "inline-block" }}>
+              {char === " " ? " " : char}
+            </span>
+          ))}
         </h1>
-        <p style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--color-text-muted)", letterSpacing: "0.08em" }}>
+        <p className="login-subtitle" style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--color-text-muted)", letterSpacing: "0.08em" }}>
           YOUR PERSONAL ACTIVITY CALENDAR
         </p>
       </div>
@@ -945,7 +1036,7 @@ function LoginScreen({ error }: { error: string | null }) {
 
       <a
         href="/api/auth"
-        className="cta-btn"
+        className="cta-btn login-cta"
         style={{
           display: "flex", alignItems: "center", gap: 12,
           background: "var(--color-orange)", color: "white", textDecoration: "none",
@@ -957,7 +1048,7 @@ function LoginScreen({ error }: { error: string | null }) {
         CONNECT WITH STRAVA
       </a>
 
-      <p style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-dim)", letterSpacing: "0.05em", maxWidth: 320, textAlign: "center" }}>
+      <p className="login-privacy" style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-dim)", letterSpacing: "0.05em", maxWidth: 320, textAlign: "center" }}>
         READS YOUR ACTIVITIES ONLY · NO WRITES · TOKENS STORED IN A SECURE HTTP-ONLY COOKIE
       </p>
     </div>
@@ -978,6 +1069,14 @@ function HomeContent() {
   const [calendarKey, setCalendarKey] = useState(0);
   const [panelOpen, setPanelOpen] = useState<PanelId | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<{ activity: StravaActivity; gear?: SummaryGear } | null>(null);
+
+  const navRef = useRef<HTMLElement>(null);
+  const weekHeaderRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  const hasAnimated = useRef(false);
+  const directionRef = useRef<"forward" | "backward">("forward");
+  const isFirstCalendarEffect = useRef(true);
 
   // Sync week offset to/from URL param
   const weekOffset = Number(searchParams.get("week") ?? "0");
@@ -1017,16 +1116,55 @@ function HomeContent() {
     if (e) setError(e);
   }, []);
 
+  // Sync directionRef so calendarKey effect always has the latest direction
+  useEffect(() => { directionRef.current = direction; }, [direction]);
+
+  // Entrance animation — fires once on first data load
+  useEffect(() => {
+    if (hasAnimated.current || loading || !activities.length || prefersReducedMotion) return;
+    hasAnimated.current = true;
+    const tl = gsap.timeline();
+    if (navRef.current) tl.fromTo(navRef.current, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" });
+    if (weekHeaderRef.current) tl.fromTo(weekHeaderRef.current, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.2, ease: "power2.out" }, "-=0.1");
+    if (summaryRef.current) tl.fromTo(summaryRef.current, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" }, "-=0.1");
+    tl.fromTo(".summary-item", { opacity: 0, y: 6 }, { opacity: 1, y: 0, stagger: 0.04, duration: 0.2, ease: "power2.out" }, "-=0.15");
+    tl.fromTo(".day-column", { opacity: 0, y: 10 }, { opacity: 1, y: 0, stagger: 0.035, duration: 0.25, ease: "power2.out" }, "-=0.1");
+    tl.fromTo(".activity-card", { opacity: 0, y: 8 }, { opacity: 1, y: 0, stagger: 0.04, duration: 0.2, ease: "power2.out" }, "-=0.15");
+  }, [loading, activities.length]); // eslint-disable-line
+
+  // Calendar enter animation on week navigation
+  useEffect(() => {
+    if (isFirstCalendarEffect.current) { isFirstCalendarEffect.current = false; return; }
+    if (!calendarRef.current || prefersReducedMotion) return;
+    const xFrom = directionRef.current === "forward" ? 40 : -40;
+    gsap.fromTo(calendarRef.current,
+      { x: xFrom, opacity: 0 },
+      { x: 0, opacity: 1, duration: 0.25, ease: "power2.out" }
+    );
+  }, [calendarKey]); // eslint-disable-line
+
   const goWeek = useCallback((delta: number) => {
-    setDirection(delta < 0 ? "backward" : "forward");
-    setCalendarKey(k => k + 1);
-    setWeekOffset(w => w + delta);
+    const dir = delta < 0 ? "backward" : "forward";
+    setDirection(dir);
+    directionRef.current = dir;
+    const doNav = () => { setCalendarKey(k => k + 1); setWeekOffset(w => w + delta); };
+    if (calendarRef.current && !prefersReducedMotion) {
+      gsap.to(calendarRef.current, { x: delta > 0 ? -40 : 40, opacity: 0, duration: 0.18, ease: "power2.in", onComplete: doNav });
+    } else {
+      doNav();
+    }
   }, [setWeekOffset]);
 
   const goToday = useCallback(() => {
-    setDirection(weekOffset < 0 ? "forward" : "backward");
-    setCalendarKey(k => k + 1);
-    setWeekOffset(0);
+    const dir = weekOffset < 0 ? "forward" : "backward";
+    setDirection(dir);
+    directionRef.current = dir;
+    const doNav = () => { setCalendarKey(k => k + 1); setWeekOffset(0); };
+    if (calendarRef.current && !prefersReducedMotion) {
+      gsap.to(calendarRef.current, { x: dir === "forward" ? -40 : 40, opacity: 0, duration: 0.18, ease: "power2.in", onComplete: doNav });
+    } else {
+      doNav();
+    }
   }, [weekOffset, setWeekOffset]);
 
   if (authed === false) return <LoginScreen error={error} />;
@@ -1050,11 +1188,11 @@ function HomeContent() {
   const isCurrentWeek = weekOffset === 0;
   const weekLabel = isCurrentWeek ? "THIS WEEK" : formatWeekLabel(weekStart, weekEnd).toUpperCase();
   const activityCount = activities.length;
-  const calendarClass = `calendar-grid ${direction === "forward" ? "calendar-enter-forward" : "calendar-enter-backward"}`;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)", padding: "0 0 48px" }}>
       <nav
+        ref={navRef}
         aria-label="Site navigation"
         style={{
           borderBottom: "1px solid var(--color-border)",
@@ -1095,7 +1233,7 @@ function HomeContent() {
 
       <main id="main" style={{ maxWidth: 960, margin: "0 auto", padding: "0 16px" }}>
         {/* Week header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 0 16px" }}>
+        <div ref={weekHeaderRef} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 0 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <button
               onClick={() => goWeek(-1)}
@@ -1133,7 +1271,6 @@ function HomeContent() {
             {weekOffset !== 0 && (
               <button
                 onClick={goToday}
-                className="animate-fade-up"
                 style={{
                   background: "transparent", border: "1px solid var(--color-border)", color: "var(--color-orange)",
                   borderRadius: 6, padding: "4px 12px", fontFamily: "var(--font-ui)", fontSize: 11,
@@ -1156,7 +1293,7 @@ function HomeContent() {
 
         {/* Weekly summary + suggestions */}
         {!loading && activities.length > 0 && (
-          <div style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div ref={summaryRef} style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
             <WeekSummary activities={activities} />
             <SuggestionRow activities={activities} strain={calculateWeeklyStrain(activities)} />
           </div>
@@ -1173,7 +1310,7 @@ function HomeContent() {
           </div>
         ) : (
           <div className="calendar-scroll">
-            <div key={calendarKey} className={calendarClass}>
+            <div ref={calendarRef} key={calendarKey} className="calendar-grid">
               {days.map((date, i) => {
                 const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
                 return (
