@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { fetchWeekActivities, getWeekRange, refreshToken, TokenData } from "@/lib/strava";
+import { fetchAthlete, fetchWeekActivities, getWeekRange, refreshToken, TokenData } from "@/lib/strava";
 
 export async function GET(req: NextRequest) {
   const cookieStore = await cookies();
@@ -31,10 +31,13 @@ export async function GET(req: NextRequest) {
   const { start, end } = getWeekRange(targetDate);
 
   try {
-    const activities = await fetchWeekActivities(tokenData.access_token, start, end);
+    const [activities, athlete] = await Promise.all([
+      fetchWeekActivities(tokenData.access_token, start, end),
+      fetchAthlete(tokenData.access_token),
+    ]);
     return NextResponse.json({
       activities,
-      athlete: tokenData.athlete,
+      athlete,
       weekStart: start.toISOString(),
       weekEnd: end.toISOString(),
     });

@@ -1,3 +1,10 @@
+export interface SummaryGear {
+  id: string;
+  primary: boolean;
+  name: string;
+  distance: number;
+}
+
 export interface StravaActivity {
   id: number;
   name: string;
@@ -17,6 +24,7 @@ export interface StravaActivity {
   kudos_count: number;
   achievement_count: number;
   map?: { summary_polyline: string };
+  gear_id?: string;
 }
 
 export interface StravaAthlete {
@@ -27,6 +35,8 @@ export interface StravaAthlete {
   profile: string;
   city: string;
   country: string;
+  bikes?: SummaryGear[];
+  shoes?: SummaryGear[];
 }
 
 export interface TokenData {
@@ -63,6 +73,14 @@ export async function refreshToken(refresh_token: string): Promise<TokenData> {
     }),
   });
   if (!res.ok) throw new Error("Token refresh failed");
+  return res.json();
+}
+
+export async function fetchAthlete(accessToken: string): Promise<StravaAthlete> {
+  const res = await fetch("https://www.strava.com/api/v3/athlete", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch athlete");
   return res.json();
 }
 
@@ -166,6 +184,25 @@ export const SPORT_EMOJI: Record<string, string> = {
 
 export function getSportEmoji(type: string): string {
   return SPORT_EMOJI[type] ?? "⚡";
+}
+
+export function getGearEmoji(sportType: string): string {
+  if (["MountainBikeRide", "GravelRide"].includes(sportType)) return "🚵";
+  if (["Ride", "VirtualRide", "EBikeRide"].includes(sportType)) return "🚴";
+  if (["Run", "TrailRun", "VirtualRun"].includes(sportType)) return "👟";
+  return "⚙️";
+}
+
+// Returns a human-readable bike type label when no gear is linked but sport_type is specific enough.
+// Returns null for generic "Ride" (could be any bike).
+export function inferredGearLabel(sportType: string): { emoji: string; name: string } | null {
+  switch (sportType) {
+    case "MountainBikeRide": return { emoji: "🚵", name: "Mountain Bike" };
+    case "GravelRide":       return { emoji: "🚵", name: "Gravel Bike" };
+    case "EBikeRide":        return { emoji: "⚡", name: "E-Bike" };
+    case "VirtualRide":      return { emoji: "🚴", name: "Indoor Bike" };
+    default:                 return null;
+  }
 }
 
 // Whoop-style weekly strain score (0–21 scale)

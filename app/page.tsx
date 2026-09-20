@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, LogOut, RefreshCw, Zap } from "lucide-react";
 import {
   StravaActivity,
   StravaAthlete,
+  SummaryGear,
   formatDistance,
   formatTime,
   formatElevation,
   formatPace,
   getSportEmoji,
   getSportColor,
+  getGearEmoji,
+  inferredGearLabel,
   getWeekRange,
   calculateWeeklyStrain,
   strainLabel,
@@ -76,7 +79,7 @@ function RouteBackground({ polyline, color }: { polyline: string; color: string 
 }
 
 /* ── Activity card ────────────────────────────────────────────────── */
-function ActivityCard({ activity, index }: { activity: StravaActivity; index: number }) {
+function ActivityCard({ activity, index, gear }: { activity: StravaActivity; index: number; gear?: SummaryGear }) {
   const color = getSportColor(activity.sport_type || activity.type);
   const emoji = getSportEmoji(activity.sport_type || activity.type);
   const pace = formatPace(activity.distance, activity.moving_time, activity.sport_type || activity.type);
@@ -132,8 +135,8 @@ function ActivityCard({ activity, index }: { activity: StravaActivity; index: nu
         )}
       </div>
 
-      {(activity.kudos_count > 0 || activity.achievement_count > 0) && (
-        <div style={{ display: "flex", gap: 8, marginTop: 5 }}>
+      {(activity.kudos_count > 0 || activity.achievement_count > 0 || gear) && (
+        <div style={{ display: "flex", gap: 8, marginTop: 5, alignItems: "center", flexWrap: "wrap" }}>
           {activity.kudos_count > 0 && (
             <span style={{ fontSize: 10, color: "var(--color-text-muted)", fontFamily: "var(--font-ui)" }}>
               <span aria-hidden="true">👏</span> {activity.kudos_count}
@@ -144,6 +147,30 @@ function ActivityCard({ activity, index }: { activity: StravaActivity; index: nu
               <span aria-hidden="true">🏆</span> {activity.achievement_count}
             </span>
           )}
+          {(() => {
+            const sportType = activity.sport_type || activity.type;
+            const label = gear
+              ? { emoji: getGearEmoji(sportType), name: gear.name }
+              : inferredGearLabel(sportType);
+            if (!label) return null;
+            return (
+              <span
+                title={label.name}
+                style={{
+                  fontSize: 10, fontFamily: "var(--font-ui)", fontWeight: 700,
+                  color: gear ? "var(--color-text-dim)" : "var(--color-text-dim)",
+                  letterSpacing: "0.05em",
+                  display: "flex", alignItems: "center", gap: 3,
+                  marginLeft: "auto",
+                }}
+              >
+                <span aria-hidden="true">{label.emoji}</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 }}>
+                  {label.name}
+                </span>
+              </span>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -165,7 +192,12 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
 }
 
 /* ── Day column ───────────────────────────────────────────────────── */
-function DayColumn({ dayIndex, date, activities }: { dayIndex: number; date: Date; activities: StravaActivity[] }) {
+function DayColumn({ dayIndex, date, activities, gearMap }: {
+  dayIndex: number;
+  date: Date;
+  activities: StravaActivity[];
+  gearMap: Record<string, SummaryGear>;
+}) {
   const today = isToday(date);
   const future = isFuture(date);
 
@@ -194,7 +226,9 @@ function DayColumn({ dayIndex, date, activities }: { dayIndex: number; date: Dat
 
       {activities.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column" }}>
-          {activities.map((a, i) => <ActivityCard key={a.id} activity={a} index={i} />)}
+          {activities.map((a, i) => (
+            <ActivityCard key={a.id} activity={a} index={i} gear={a.gear_id ? gearMap[a.gear_id] : undefined} />
+          ))}
         </div>
       ) : (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 4px" }}>
@@ -459,6 +493,9 @@ function HomeContent() {
     activitiesByDay[key].push(a);
   });
 
+  const gearMap: Record<string, SummaryGear> = {};
+  [...(athlete?.bikes ?? []), ...(athlete?.shoes ?? [])].forEach(g => { gearMap[g.id] = g; });
+
   const isCurrentWeek = weekOffset === 0;
   const weekLabel = isCurrentWeek ? "THIS WEEK" : formatWeekLabel(weekStart, weekEnd).toUpperCase();
   const activityCount = activities.length;
@@ -599,7 +636,7 @@ function HomeContent() {
               {days.map((date, i) => {
                 const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
                 return (
-                  <DayColumn key={key} dayIndex={i} date={date} activities={activitiesByDay[key] ?? []} />
+                  <DayColumn key={key} dayIndex={i} date={date} activities={activitiesByDay[key] ?? []} gearMap={gearMap} />
                 );
               })}
             </div>
