@@ -103,7 +103,13 @@ function Panel({ title, onClose, children }: { title: string; onClose: () => voi
           <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.04em", color: "var(--color-text-primary)" }}>
             {title}
           </span>
-          <button onClick={handleClose} aria-label="Close" style={{ background: "transparent", border: "none", color: "var(--color-text-dim)", cursor: "pointer", display: "flex", padding: 4 }}>
+          <button
+            onClick={handleClose}
+            aria-label="Close"
+            onMouseEnter={e => !prefersReducedMotion && gsap.to(e.currentTarget, { rotate: 90, scale: 1.1, duration: 0.18, ease: "power2.out" })}
+            onMouseLeave={e => !prefersReducedMotion && gsap.to(e.currentTarget, { rotate: 0, scale: 1, duration: 0.14, ease: "power2.out" })}
+            style={{ background: "transparent", border: "none", color: "var(--color-text-dim)", cursor: "pointer", display: "flex", padding: 4 }}
+          >
             <X size={18} aria-hidden="true" />
           </button>
         </div>
@@ -747,6 +753,10 @@ function ActivityCard({ activity, index, gear, onSelect }: {
       aria-label={`View details for ${activity.name}`}
       onClick={() => onSelect(activity, gear)}
       onKeyDown={e => { if (e.key === "Enter" || e.key === " ") onSelect(activity, gear); }}
+      onMouseEnter={e => !prefersReducedMotion && gsap.to(e.currentTarget, { y: -2, duration: 0.14, ease: "power2.out" })}
+      onMouseLeave={e => !prefersReducedMotion && gsap.to(e.currentTarget, { y: 0, duration: 0.12, ease: "power2.out" })}
+      onMouseDown={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 0.98, duration: 0.08 })}
+      onMouseUp={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 1, duration: 0.14, ease: "back.out(2)" })}
       className="activity-card"
       style={{
         background: "var(--color-surface)",
@@ -1165,6 +1175,7 @@ function HomeContent() {
   const hasAnimated = useRef(false);
   const directionRef = useRef<"forward" | "backward">("forward");
   const isFirstCalendarEffect = useRef(true);
+  const refreshSpinning = useRef(false);
 
   // Sync week offset to/from URL param
   const weekOffset = Number(searchParams.get("week") ?? "0");
@@ -1330,7 +1341,19 @@ function HomeContent() {
 
         <div className="nav-controls" style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
-            onClick={loadActivities}
+            onClick={e => {
+              loadActivities();
+              if (!prefersReducedMotion) {
+                const btn = e.currentTarget;
+                refreshSpinning.current = true;
+                gsap.killTweensOf(btn, "rotate");
+                gsap.fromTo(btn, { rotate: 0 }, { rotate: 360, duration: 0.52, ease: "power2.inOut",
+                  onComplete: () => { gsap.set(btn, { rotate: 0 }); refreshSpinning.current = false; }
+                });
+              }
+            }}
+            onMouseEnter={e => { if (!prefersReducedMotion && !refreshSpinning.current) gsap.to(e.currentTarget, { rotate: 30, duration: 0.18, ease: "power2.out" }); }}
+            onMouseLeave={e => { if (!prefersReducedMotion && !refreshSpinning.current) gsap.to(e.currentTarget, { rotate: 0, duration: 0.14, ease: "power2.out" }); }}
             aria-label="Refresh activities"
             style={{ background: "transparent", border: "none", color: "var(--color-text-dim)", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
           >
@@ -1359,6 +1382,10 @@ function HomeContent() {
               onClick={() => goWeek(-1)}
               aria-label="Previous week"
               className="week-nav-btn"
+              onMouseEnter={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 1.12, duration: 0.12, ease: "power2.out" })}
+              onMouseLeave={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 1, duration: 0.1, ease: "power2.out" })}
+              onMouseDown={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 0.88, duration: 0.08 })}
+              onMouseUp={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 1, duration: 0.14, ease: "back.out(2)" })}
               style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)", borderRadius: 6, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
             >
               <ChevronLeft size={16} aria-hidden="true" />
@@ -1387,6 +1414,10 @@ function HomeContent() {
               disabled={weekOffset >= 0}
               aria-label="Next week"
               className="week-nav-btn"
+              onMouseEnter={e => { if (!prefersReducedMotion && weekOffset < 0) gsap.to(e.currentTarget, { scale: 1.12, duration: 0.12, ease: "power2.out" }); }}
+              onMouseLeave={e => { if (!prefersReducedMotion && weekOffset < 0) gsap.to(e.currentTarget, { scale: 1, duration: 0.1, ease: "power2.out" }); }}
+              onMouseDown={e => { if (!prefersReducedMotion && weekOffset < 0) gsap.to(e.currentTarget, { scale: 0.88, duration: 0.08 }); }}
+              onMouseUp={e => { if (!prefersReducedMotion && weekOffset < 0) gsap.to(e.currentTarget, { scale: 1, duration: 0.14, ease: "back.out(2)" }); }}
               style={{
                 background: "var(--color-surface)", border: "1px solid var(--color-border)",
                 color: weekOffset >= 0 ? "var(--color-text-dim)" : "var(--color-text-primary)",
@@ -1400,6 +1431,10 @@ function HomeContent() {
             {weekOffset !== 0 && (
               <button
                 onClick={goToday}
+                onMouseEnter={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 1.06, duration: 0.12, ease: "power2.out" })}
+                onMouseLeave={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 1, duration: 0.1, ease: "power2.out" })}
+                onMouseDown={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 0.92, duration: 0.08 })}
+                onMouseUp={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 1, duration: 0.14, ease: "back.out(2)" })}
                 style={{
                   background: "transparent", border: "1px solid var(--color-border)", color: "var(--color-orange)",
                   borderRadius: 6, padding: "4px 12px", fontFamily: "var(--font-ui)", fontSize: 11,
