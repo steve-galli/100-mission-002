@@ -1581,9 +1581,80 @@ function SummaryItem({ label, value, accent }: { label: string; value: string; a
 }
 
 /* ── Login screen ─────────────────────────────────────────────────── */
-function LoginScreen({ error }: { error: string | null }) {
+interface StoredProfileSummary { id: number; firstname: string; lastname: string; profile_medium: string; isActive: boolean; }
+
+function ProfileCard({ profile, onSelect }: { profile: StoredProfileSummary; onSelect: () => void }) {
+  const [imgError, setImgError] = useState(false);
+  return (
+    <button
+      onClick={onSelect}
+      onMouseEnter={e => !prefersReducedMotion && gsap.to(e.currentTarget, { y: -3, scale: 1.04, duration: 0.14, ease: "power2.out" })}
+      onMouseLeave={e => !prefersReducedMotion && gsap.to(e.currentTarget, { y: 0, scale: 1, duration: 0.12, ease: "power2.out" })}
+      onMouseDown={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 0.96, duration: 0.08 })}
+      onMouseUp={e => !prefersReducedMotion && gsap.to(e.currentTarget, { scale: 1.04, duration: 0.12, ease: "back.out(2)" })}
+      className="login-profile-card"
+      style={{
+        background: profile.isActive ? "rgba(252,82,0,0.1)" : "var(--color-surface)",
+        border: `1px solid ${profile.isActive ? "var(--color-orange)" : "var(--color-border)"}`,
+        borderRadius: 12, padding: "12px 16px", cursor: "pointer",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+        minWidth: 96, boxShadow: "inset 0 3px 5px rgba(0,0,0,.125)",
+      }}
+      aria-label={`Sign in as ${profile.firstname} ${profile.lastname}`}
+    >
+      {!imgError && profile.profile_medium ? (
+        <img
+          src={profile.profile_medium}
+          alt=""
+          onError={() => setImgError(true)}
+          style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--color-border)" }}
+        />
+      ) : (
+        <div style={{
+          width: 52, height: 52, borderRadius: "50%",
+          background: "var(--color-orange)", display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 20, color: "white",
+        }}>
+          {profile.firstname[0]}{profile.lastname[0]}
+        </div>
+      )}
+      <div>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, color: "var(--color-text-primary)", whiteSpace: "nowrap", textAlign: "center" }}>
+          {profile.firstname} {profile.lastname}
+        </div>
+        {profile.isActive && (
+          <div style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "var(--color-orange)", marginTop: 2, textAlign: "center" }}>
+            LAST USED
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function LoginScreen({ error, onProfileSwitch }: { error: string | null; onProfileSwitch?: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [profiles, setProfiles] = useState<StoredProfileSummary[]>([]);
+  const [switching, setSwitching] = useState<number | null>(null);
   const headline = "STRAVA WEEK";
+
+  useEffect(() => {
+    fetch("/api/profiles")
+      .then(r => r.ok ? r.json() : [])
+      .then((data: StoredProfileSummary[]) => {
+        if (data.length > 0) { setProfiles(data); return; }
+        try {
+          const cached = localStorage.getItem("strava_last_profiles");
+          if (cached) setProfiles(JSON.parse(cached));
+        } catch {}
+      })
+      .catch(() => {
+        try {
+          const cached = localStorage.getItem("strava_last_profiles");
+          if (cached) setProfiles(JSON.parse(cached));
+        } catch {}
+      });
+  }, []);
 
   useGSAP(() => {
     if (prefersReducedMotion) return;
@@ -1602,20 +1673,50 @@ function LoginScreen({ error }: { error: string | null }) {
       { opacity: 1, y: 0, duration: 0.25, ease: "power2.out" },
       "-=0.3"
     );
+    tl.fromTo(".login-profiles",
+      { opacity: 0, y: 12 },
+      { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" },
+      "-=0.15"
+    );
+    tl.fromTo(".login-profile-card",
+      { opacity: 0, scale: 0.88, y: 8 },
+      { opacity: 1, scale: 1, y: 0, stagger: 0.07, duration: 0.28, ease: "back.out(1.4)" },
+      "-=0.2"
+    );
     tl.fromTo(".login-cta",
       { opacity: 0, y: 10, scale: 0.95 },
       { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: "back.out(1.5)" },
-      "-=0.15"
+      "-=0.1"
     );
     tl.fromTo(".login-privacy",
       { opacity: 0 },
       { opacity: 1, duration: 0.2 },
       "-=0.1"
     );
-  }, { scope: containerRef });
+  }, { scope: containerRef, dependencies: [profiles.length] });
+
+  const handleProfileSelect = async (profile: StoredProfileSummary) => {
+    setSwitching(profile.id);
+    try {
+      const res = await fetch("/api/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ athlete_id: profile.id }),
+      });
+      if (res.ok) {
+        onProfileSwitch?.();
+      } else {
+        // Profile not in active cookie (cached only) — re-authenticate via OAuth
+        window.location.href = "/api/auth";
+      }
+    } catch {
+      window.location.href = "/api/auth";
+    }
+    setSwitching(null);
+  };
 
   return (
-    <div ref={containerRef} style={{ minHeight: "100vh", background: "var(--color-bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 32, padding: 24 }}>
+    <div ref={containerRef} style={{ minHeight: "100vh", background: "var(--color-bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 28, padding: 24 }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
         <div className="login-logo">
           <StravaIcon size={48} />
@@ -1635,6 +1736,21 @@ function LoginScreen({ error }: { error: string | null }) {
         </p>
       </div>
 
+      {profiles.length > 0 && (
+        <div className="login-profiles" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+          <div style={{ fontFamily: "var(--font-ui)", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "var(--color-text-dim)" }}>
+            SELECT PROFILE
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center", maxWidth: 480 }}>
+            {profiles.map(p => (
+              <div key={p.id} style={{ opacity: switching === p.id ? 0.5 : 1, transition: "opacity 0.15s", pointerEvents: switching !== null ? "none" : "auto" }}>
+                <ProfileCard profile={p} onSelect={() => handleProfileSelect(p)} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {error && (
         <div role="alert" style={{ background: "rgba(223,38,38,0.12)", border: "1px solid #df2626", borderRadius: 8, padding: "10px 16px", fontFamily: "var(--font-ui)", fontSize: 13, color: "#df2626" }}>
           {error === "denied" ? "Authorization was denied. Please try again." : "Something went wrong. Please try again."}
@@ -1652,7 +1768,7 @@ function LoginScreen({ error }: { error: string | null }) {
         }}
       >
         <Zap size={18} aria-hidden="true" />
-        CONNECT WITH STRAVA
+        {profiles.length > 0 ? "ADD PROFILE" : "CONNECT WITH STRAVA"}
       </a>
 
       <p className="login-privacy" style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-dim)", letterSpacing: "0.05em", maxWidth: 320, textAlign: "center" }}>
@@ -1709,6 +1825,19 @@ function HomeContent() {
       setActivities(data.activities);
       setAthlete(data.athlete);
       setAuthed(true);
+      // Cache profile display info so the login screen can show it after cookie expiry
+      if (data.athlete) {
+        try {
+          const a = data.athlete;
+          const entry: StoredProfileSummary = { id: a.id, firstname: a.firstname, lastname: a.lastname, profile_medium: a.profile_medium, isActive: true };
+          const existing: StoredProfileSummary[] = JSON.parse(localStorage.getItem("strava_last_profiles") || "[]");
+          const idx = existing.findIndex(p => p.id === entry.id);
+          const merged = idx >= 0
+            ? existing.map((p, i) => i === idx ? entry : { ...p, isActive: false })
+            : [entry, ...existing.map(p => ({ ...p, isActive: false }))];
+          localStorage.setItem("strava_last_profiles", JSON.stringify(merged));
+        } catch {}
+      }
     } catch {
       setError("Failed to load activities.");
     } finally {
@@ -1805,7 +1934,7 @@ function HomeContent() {
     }
   }, [weekOffset, setWeekOffset]);
 
-  if (authed === false) return <LoginScreen error={error} />;
+  if (authed === false) return <LoginScreen error={error} onProfileSwitch={() => { setAuthed(null); loadActivities(); }} />;
 
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);

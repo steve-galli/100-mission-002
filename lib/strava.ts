@@ -120,6 +120,54 @@ export interface TokenData {
   athlete: StravaAthlete;
 }
 
+// Multi-profile cookie names
+export const PROFILES_COOKIE = "strava_profiles";
+export const ACTIVE_COOKIE   = "strava_active";
+
+export function parseProfiles(raw: string | undefined): TokenData[] {
+  if (!raw) return [];
+  try { return JSON.parse(raw) as TokenData[]; } catch { return []; }
+}
+
+export function getActiveProfile(profiles: TokenData[], activeId: string | undefined): TokenData | null {
+  if (!profiles.length) return null;
+  if (activeId) {
+    const found = profiles.find(p => String(p.athlete.id) === activeId);
+    if (found) return found;
+  }
+  return profiles[0];
+}
+
+// Reads cookie values, migrates legacy strava_token, refreshes token if needed.
+// Returns null if unauthenticated.
+export async function resolveActiveProfile(
+  profilesRaw: string | undefined,
+  activeIdRaw: string | undefined,
+  legacyTokenRaw?: string | undefined
+): Promise<{ tokenData: TokenData; profiles: TokenData[]; refreshed: boolean } | null> {
+  let profiles = parseProfiles(profilesRaw);
+
+  if (!profiles.length && legacyTokenRaw) {
+    try { profiles = [JSON.parse(legacyTokenRaw) as TokenData]; } catch { return null; }
+  }
+  if (!profiles.length) return null;
+
+  let tokenData = getActiveProfile(profiles, activeIdRaw);
+  if (!tokenData) return null;
+
+  let refreshed = false;
+  if (Date.now() / 1000 > tokenData.expires_at - 300) {
+    try {
+      const fresh = await refreshToken(tokenData.refresh_token);
+      tokenData = { ...tokenData, ...fresh, athlete: fresh.athlete ?? tokenData.athlete };
+      profiles = profiles.map(p => p.athlete.id === tokenData!.athlete.id ? tokenData! : p);
+      refreshed = true;
+    } catch { return null; }
+  }
+
+  return { tokenData, profiles, refreshed };
+}
+
 export async function exchangeCode(code: string): Promise<TokenData> {
   const res = await fetch("https://www.strava.com/oauth/token", {
     method: "POST",
