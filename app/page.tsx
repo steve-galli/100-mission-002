@@ -7,6 +7,7 @@ import {
   StravaActivity,
   StravaAthlete,
   AthleteStats,
+  DetailedActivity,
   SummaryGear,
   formatDistance,
   formatTime,
@@ -377,6 +378,215 @@ function ProfileMenu({ athlete, onOpen }: { athlete: StravaAthlete; onOpen: (id:
   );
 }
 
+/* ── Activity detail panel ────────────────────────────────────────── */
+function DetailRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "7px 0", borderBottom: "1px solid var(--color-border)" }}>
+      <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-muted)", letterSpacing: "0.04em", flexShrink: 0 }}>{label}</span>
+      <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: accent ? "var(--color-orange)" : "var(--color-text-primary)", fontVariantNumeric: "tabular-nums", textAlign: "right", marginLeft: 12 }}>{value}</span>
+    </div>
+  );
+}
+
+function DetailSection({ label }: { label: string }) {
+  return (
+    <div style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "var(--color-text-dim)", marginTop: 20, marginBottom: 4 }}>
+      {label}
+    </div>
+  );
+}
+
+function ActivityRouteMap({ polyline, color }: { polyline: string; color: string }) {
+  const points = decodePolyline(polyline);
+  const path = pointsToSvgPath(points, 280, 160, 12);
+  if (!path) return null;
+  return (
+    <svg viewBox="0 0 280 160" aria-hidden="true" style={{ width: "100%", display: "block", borderRadius: 6, background: "var(--color-surface)", marginBottom: 16 }}>
+      <path d={path} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+    </svg>
+  );
+}
+
+function ActivityDetailPanel({ activity, gear }: { activity: StravaActivity; gear?: SummaryGear }) {
+  const [detail, setDetail] = useState<DetailedActivity | null>(null);
+  const [detailLoading, setDetailLoading] = useState(true);
+  const sportType = activity.sport_type || activity.type;
+  const color = getSportColor(sportType);
+  const emoji = getSportEmoji(sportType);
+  const gearLabel = gear ? { emoji: getGearEmoji(sportType), name: gear.name } : inferredGearLabel(sportType);
+
+  useEffect(() => {
+    fetch(`/api/activity/${activity.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setDetail(d); })
+      .finally(() => setDetailLoading(false));
+  }, [activity.id]);
+
+  const d = detail ?? activity;
+  const startDate = new Date(activity.start_date_local);
+  const dateStr = new Intl.DateTimeFormat("en", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(startDate);
+  const timeStr = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", hour12: false }).format(startDate);
+
+  const pace = formatPace(activity.distance, activity.moving_time, sportType);
+  const avgSpeedKmh = activity.average_speed * 3.6;
+  const maxSpeedKmh = activity.max_speed * 3.6;
+  const isRide = ["Ride", "VirtualRide", "EBikeRide", "GravelRide", "MountainBikeRide"].includes(sportType);
+  const isRun  = ["Run", "TrailRun", "VirtualRun"].includes(sportType);
+
+  return (
+    <div>
+      {/* Route map */}
+      {activity.map?.summary_polyline && (
+        <ActivityRouteMap polyline={activity.map.summary_polyline} color={color} />
+      )}
+
+      {/* Meta */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-muted)", letterSpacing: "0.04em" }}>{dateStr}</div>
+        <div style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-dim)", marginTop: 2 }}>{timeStr}</div>
+        {gearLabel && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6 }}>
+            <span aria-hidden="true">{gearLabel.emoji}</span>
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, color: "var(--color-text-muted)", letterSpacing: "0.04em" }}>{gearLabel.name}</span>
+          </div>
+        )}
+        {(activity.commute || activity.trainer) && (
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            {activity.commute && <span style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "var(--color-blue)", border: "1px solid var(--color-blue)", borderRadius: 4, padding: "1px 5px" }}>COMMUTE</span>}
+            {activity.trainer && <span style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "var(--color-text-dim)", border: "1px solid var(--color-border)", borderRadius: 4, padding: "1px 5px" }}>TRAINER</span>}
+          </div>
+        )}
+      </div>
+
+      {/* Performance */}
+      <DetailSection label="PERFORMANCE" />
+      {activity.distance > 0 && <DetailRow label="Distance" value={formatDistance(activity.distance, sportType)} accent />}
+      <DetailRow label="Moving Time" value={formatTime(activity.moving_time)} />
+      {activity.elapsed_time !== activity.moving_time && <DetailRow label="Elapsed Time" value={formatTime(activity.elapsed_time)} />}
+      {pace && isRun && <DetailRow label="Avg Pace" value={pace} accent />}
+      {isRide && <DetailRow label="Avg Speed" value={`${new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(avgSpeedKmh)} km/h`} accent />}
+      {activity.max_speed > 0 && <DetailRow label="Max Speed" value={`${new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(maxSpeedKmh)} km/h`} />}
+      {activity.total_elevation_gain > 0 && <DetailRow label="Elevation Gain" value={formatElevation(activity.total_elevation_gain)} />}
+      {activity.elev_high != null && <DetailRow label="Elev High" value={`${Math.round(activity.elev_high)} m`} />}
+      {activity.elev_low != null && <DetailRow label="Elev Low" value={`${Math.round(activity.elev_low)} m`} />}
+      {(d as DetailedActivity).calories != null && <DetailRow label="Calories" value={`${Math.round((d as DetailedActivity).calories!)} kcal`} />}
+
+      {/* Heart Rate */}
+      {(activity.average_heartrate || activity.max_heartrate) && (
+        <>
+          <DetailSection label="HEART RATE" />
+          {activity.average_heartrate && <DetailRow label="Avg HR" value={`${Math.round(activity.average_heartrate)} bpm`} />}
+          {activity.max_heartrate && <DetailRow label="Max HR" value={`${Math.round(activity.max_heartrate)} bpm`} />}
+          {activity.suffer_score != null && activity.suffer_score > 0 && <DetailRow label="Suffer Score" value={String(activity.suffer_score)} />}
+        </>
+      )}
+
+      {/* Power */}
+      {(activity.average_watts || activity.kilojoules) && (
+        <>
+          <DetailSection label="POWER" />
+          {activity.average_watts && <DetailRow label="Avg Power" value={`${Math.round(activity.average_watts)} W`} />}
+          {activity.weighted_average_watts && <DetailRow label="Norm Power" value={`${Math.round(activity.weighted_average_watts)} W`} />}
+          {activity.max_watts && <DetailRow label="Max Power" value={`${Math.round(activity.max_watts)} W`} />}
+          {activity.kilojoules && <DetailRow label="Energy" value={`${Math.round(activity.kilojoules)} kJ`} />}
+        </>
+      )}
+
+      {/* Cadence */}
+      {activity.average_cadence != null && (
+        <>
+          <DetailSection label="CADENCE" />
+          <DetailRow label="Avg Cadence" value={`${Math.round(activity.average_cadence)} rpm`} />
+        </>
+      )}
+
+      {/* Social */}
+      {(activity.kudos_count > 0 || (activity.achievement_count ?? 0) > 0 || (activity.pr_count ?? 0) > 0 || (activity.comment_count ?? 0) > 0) && (
+        <>
+          <DetailSection label="SOCIAL" />
+          {activity.kudos_count > 0 && <DetailRow label="👏 Kudos" value={String(activity.kudos_count)} />}
+          {(activity.achievement_count ?? 0) > 0 && <DetailRow label="🏆 Achievements" value={String(activity.achievement_count)} />}
+          {(activity.pr_count ?? 0) > 0 && <DetailRow label="🥇 PRs" value={String(activity.pr_count)} />}
+          {(activity.comment_count ?? 0) > 0 && <DetailRow label="💬 Comments" value={String(activity.comment_count)} />}
+        </>
+      )}
+
+      {/* Device / Description (from detailed) */}
+      {!detailLoading && detail && (detail.device_name || detail.description) && (
+        <>
+          <DetailSection label="DETAILS" />
+          {detail.device_name && <DetailRow label="Device" value={detail.device_name} />}
+          {detail.description && (
+            <div style={{ marginTop: 8, padding: "10px 0", borderBottom: "1px solid var(--color-border)" }}>
+              <div style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-muted)", marginBottom: 4 }}>Description</div>
+              <div style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-primary)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{detail.description}</div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Splits (runs) */}
+      {!detailLoading && detail?.splits_metric && detail.splits_metric.length > 0 && (
+        <>
+          <DetailSection label="KM SPLITS" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr", gap: "0 10px", padding: "4px 0", borderBottom: "1px solid var(--color-border)" }}>
+              {["KM", "TIME", "PACE", "ELEV"].map(h => (
+                <span key={h} style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, color: "var(--color-text-dim)", letterSpacing: "0.08em" }}>{h}</span>
+              ))}
+            </div>
+            {detail.splits_metric.map(s => {
+              const splitPaceSecPerKm = s.moving_time / (s.distance / 1000);
+              const pm = Math.floor(splitPaceSecPerKm / 60);
+              const ps = Math.round(splitPaceSecPerKm % 60);
+              return (
+                <div key={s.split} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr", gap: "0 10px", padding: "6px 0", borderBottom: "1px solid var(--color-border)" }}>
+                  <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, color: "var(--color-text-dim)", fontVariantNumeric: "tabular-nums" }}>{s.split}</span>
+                  <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>{formatTime(s.moving_time)}</span>
+                  <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-orange)", fontVariantNumeric: "tabular-nums" }}>{pm}:{ps.toString().padStart(2, "0")}</span>
+                  <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: s.elevation_difference > 0 ? "#fdb999" : "var(--color-teal)", fontVariantNumeric: "tabular-nums" }}>
+                    {s.elevation_difference > 0 ? "+" : ""}{Math.round(s.elevation_difference)}m
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Laps (rides) */}
+      {!detailLoading && detail?.laps && detail.laps.length > 1 && (
+        <>
+          <DetailSection label="LAPS" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr", gap: "0 10px", padding: "4px 0", borderBottom: "1px solid var(--color-border)" }}>
+              {["#", "DIST", "TIME", "SPEED"].map(h => (
+                <span key={h} style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, color: "var(--color-text-dim)", letterSpacing: "0.08em" }}>{h}</span>
+              ))}
+            </div>
+            {detail.laps.map(lap => (
+              <div key={lap.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr 1fr 1fr", gap: "0 10px", padding: "6px 0", borderBottom: "1px solid var(--color-border)" }}>
+                <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, color: "var(--color-text-dim)", fontVariantNumeric: "tabular-nums" }}>{lap.lap_index}</span>
+                <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>{formatDistance(lap.distance, sportType)}</span>
+                <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>{formatTime(lap.moving_time)}</span>
+                <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-orange)", fontVariantNumeric: "tabular-nums" }}>
+                  {new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(lap.average_speed * 3.6)} km/h
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {detailLoading && (
+        <div style={{ marginTop: 16, fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-dim)", letterSpacing: "0.06em" }}>
+          LOADING DETAILS…
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Logo ─────────────────────────────────────────────────────────── */
 function StravaIcon({ size = 28 }: { size?: number }) {
   return (
@@ -406,13 +616,23 @@ function RouteBackground({ polyline, color }: { polyline: string; color: string 
 }
 
 /* ── Activity card ────────────────────────────────────────────────── */
-function ActivityCard({ activity, index, gear }: { activity: StravaActivity; index: number; gear?: SummaryGear }) {
+function ActivityCard({ activity, index, gear, onSelect }: {
+  activity: StravaActivity;
+  index: number;
+  gear?: SummaryGear;
+  onSelect: (activity: StravaActivity, gear?: SummaryGear) => void;
+}) {
   const color = getSportColor(activity.sport_type || activity.type);
   const emoji = getSportEmoji(activity.sport_type || activity.type);
   const pace = formatPace(activity.distance, activity.moving_time, activity.sport_type || activity.type);
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`View details for ${activity.name}`}
+      onClick={() => onSelect(activity, gear)}
+      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") onSelect(activity, gear); }}
       className="activity-card animate-fade-up"
       style={{
         animationDelay: `${index * 60}ms`,
@@ -425,6 +645,7 @@ function ActivityCard({ activity, index, gear }: { activity: StravaActivity; ind
         position: "relative",
         overflow: "hidden",
         boxShadow: "inset 0 3px 5px rgba(0,0,0,.125)",
+        cursor: "pointer",
       }}
     >
       {/* Colored left accent — clipped by overflow:hidden so it respects border-radius */}
@@ -519,11 +740,12 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
 }
 
 /* ── Day column ───────────────────────────────────────────────────── */
-function DayColumn({ dayIndex, date, activities, gearMap }: {
+function DayColumn({ dayIndex, date, activities, gearMap, onSelect }: {
   dayIndex: number;
   date: Date;
   activities: StravaActivity[];
   gearMap: Record<string, SummaryGear>;
+  onSelect: (activity: StravaActivity, gear?: SummaryGear) => void;
 }) {
   const today = isToday(date);
   const future = isFuture(date);
@@ -554,7 +776,7 @@ function DayColumn({ dayIndex, date, activities, gearMap }: {
       {activities.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {activities.map((a, i) => (
-            <ActivityCard key={a.id} activity={a} index={i} gear={a.gear_id ? gearMap[a.gear_id] : undefined} />
+            <ActivityCard key={a.id} activity={a} index={i} gear={a.gear_id ? gearMap[a.gear_id] : undefined} onSelect={onSelect} />
           ))}
         </div>
       ) : (
@@ -755,6 +977,7 @@ function HomeContent() {
   const [direction, setDirection] = useState<"forward" | "backward">("forward");
   const [calendarKey, setCalendarKey] = useState(0);
   const [panelOpen, setPanelOpen] = useState<PanelId | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<{ activity: StravaActivity; gear?: SummaryGear } | null>(null);
 
   // Sync week offset to/from URL param
   const weekOffset = Number(searchParams.get("week") ?? "0");
@@ -864,6 +1087,11 @@ function HomeContent() {
       {panelOpen === "settings" && athlete && <Panel title="SETTINGS"     onClose={() => setPanelOpen(null)}><SettingsPanel athlete={athlete} /></Panel>}
       {panelOpen === "garage"   && athlete && <Panel title="BIKE GARAGE"  onClose={() => setPanelOpen(null)}><BikeGaragePanel bikes={athlete.bikes ?? []} /></Panel>}
       {panelOpen === "progress"            && <Panel title="PROGRESS"     onClose={() => setPanelOpen(null)}><ProgressPanel /></Panel>}
+      {selectedActivity && (
+        <Panel title={selectedActivity.activity.name} onClose={() => setSelectedActivity(null)}>
+          <ActivityDetailPanel activity={selectedActivity.activity} gear={selectedActivity.gear} />
+        </Panel>
+      )}
 
       <main id="main" style={{ maxWidth: 960, margin: "0 auto", padding: "0 16px" }}>
         {/* Week header */}
@@ -949,7 +1177,7 @@ function HomeContent() {
               {days.map((date, i) => {
                 const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
                 return (
-                  <DayColumn key={key} dayIndex={i} date={date} activities={activitiesByDay[key] ?? []} gearMap={gearMap} />
+                  <DayColumn key={key} dayIndex={i} date={date} activities={activitiesByDay[key] ?? []} gearMap={gearMap} onSelect={(a, g) => setSelectedActivity({ activity: a, gear: g })} />
                 );
               })}
             </div>

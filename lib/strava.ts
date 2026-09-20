@@ -12,19 +12,72 @@ export interface StravaActivity {
   sport_type: string;
   start_date: string;
   start_date_local: string;
-  distance: number;       // metres
-  moving_time: number;    // seconds
-  elapsed_time: number;   // seconds
-  total_elevation_gain: number; // metres
-  average_speed: number;  // m/s
+  distance: number;
+  moving_time: number;
+  elapsed_time: number;
+  total_elevation_gain: number;
+  average_speed: number;
   max_speed: number;
   average_heartrate?: number;
   max_heartrate?: number;
+  average_cadence?: number;
+  average_watts?: number;
+  max_watts?: number;
+  weighted_average_watts?: number;
+  kilojoules?: number;
+  device_watts?: boolean;
+  has_heartrate?: boolean;
   suffer_score?: number;
   kudos_count: number;
   achievement_count: number;
+  pr_count?: number;
+  comment_count?: number;
+  athlete_count?: number;
+  total_photo_count?: number;
+  commute?: boolean;
+  trainer?: boolean;
+  elev_high?: number;
+  elev_low?: number;
+  start_latlng?: [number, number];
+  end_latlng?: [number, number];
   map?: { summary_polyline: string };
   gear_id?: string;
+}
+
+export interface ActivityLap {
+  id: number;
+  name: string;
+  lap_index: number;
+  split: number;
+  distance: number;
+  moving_time: number;
+  elapsed_time: number;
+  total_elevation_gain: number;
+  average_speed: number;
+  max_speed: number;
+  average_heartrate?: number;
+  max_heartrate?: number;
+  average_watts?: number;
+  average_cadence?: number;
+}
+
+export interface ActivitySplit {
+  split: number;
+  distance: number;
+  moving_time: number;
+  elapsed_time: number;
+  elevation_difference: number;
+  average_speed: number;
+  average_heartrate?: number;
+  pace_zone: number;
+}
+
+export interface DetailedActivity extends StravaActivity {
+  description?: string;
+  calories?: number;
+  device_name?: string;
+  laps?: ActivityLap[];
+  splits_metric?: ActivitySplit[];
 }
 
 export interface StravaAthlete {
