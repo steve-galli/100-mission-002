@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, LogOut, RefreshCw, Zap } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, RefreshCw, User, Settings, Bike, TrendingUp, X, Zap } from "lucide-react";
 import {
   StravaActivity,
   StravaAthlete,
+  AthleteStats,
   SummaryGear,
   formatDistance,
   formatTime,
@@ -49,6 +50,332 @@ const prefersReducedMotion =
   typeof window !== "undefined"
     ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
     : false;
+
+/* ── Panel sheet ──────────────────────────────────────────────────── */
+function Panel({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 300 }} />
+      <div
+        role="dialog"
+        aria-label={title}
+        style={{
+          position: "fixed", top: 0, right: 0, bottom: 0, width: 320,
+          background: "var(--color-bg)", borderLeft: "1px solid var(--color-border)",
+          zIndex: 301, display: "flex", flexDirection: "column",
+          animation: "slideInRight 0.2s cubic-bezier(0,1.085,0.4,1)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.04em", color: "var(--color-text-primary)" }}>
+            {title}
+          </span>
+          <button onClick={onClose} aria-label="Close" style={{ background: "transparent", border: "none", color: "var(--color-text-dim)", cursor: "pointer", display: "flex", padding: 4 }}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
+          {children}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── Panel section heading ────────────────────────────────────────── */
+function PanelSection({ label }: { label: string }) {
+  return (
+    <div style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "var(--color-text-dim)", marginTop: 20, marginBottom: 8 }}>
+      {label}
+    </div>
+  );
+}
+
+function PanelRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid var(--color-border)" }}>
+      <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-muted)", letterSpacing: "0.04em" }}>{label}</span>
+      <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>{value}</span>
+    </div>
+  );
+}
+
+/* ── Profile panel ────────────────────────────────────────────────── */
+function ProfilePanel({ athlete }: { athlete: StravaAthlete }) {
+  return (
+    <div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, paddingBottom: 20, borderBottom: "1px solid var(--color-border)", marginBottom: 4 }}>
+        {athlete.profile_medium && (
+          <img src={athlete.profile_medium} alt="" width={72} height={72} style={{ borderRadius: "50%", border: "3px solid var(--color-border)" }} />
+        )}
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 20, color: "var(--color-text-primary)" }}>
+            {athlete.firstname} {athlete.lastname}
+          </div>
+          {(athlete.city || athlete.country) && (
+            <div style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-muted)", marginTop: 4 }}>
+              {[athlete.city, athlete.country].filter(Boolean).join(", ")}
+            </div>
+          )}
+        </div>
+      </div>
+      {(athlete.follower_count != null || athlete.friend_count != null) && (
+        <>
+          <PanelSection label="CONNECTIONS" />
+          {athlete.friend_count != null && <PanelRow label="Following" value={athlete.friend_count.toLocaleString("en")} />}
+          {athlete.follower_count != null && <PanelRow label="Followers" value={athlete.follower_count.toLocaleString("en")} />}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Settings panel ───────────────────────────────────────────────── */
+function SettingsPanel({ athlete }: { athlete: StravaAthlete }) {
+  return (
+    <div>
+      <PanelSection label="APP" />
+      <PanelRow label="Name" value="Strava Week" />
+      <PanelRow label="Version" value="1.0" />
+      <PanelSection label="ACCOUNT" />
+      <PanelRow label="Athlete" value={`${athlete.firstname} ${athlete.lastname}`} />
+      <PanelRow label="ID" value={String(athlete.id)} />
+      <PanelSection label="PERMISSIONS" />
+      <PanelRow label="Activities" value="Read all" />
+      <PanelRow label="Profile" value="Read all" />
+      <PanelRow label="Writes" value="None" />
+    </div>
+  );
+}
+
+/* ── Bike garage panel ────────────────────────────────────────────── */
+function bikeEmoji(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("mountain") || n.includes("mtb") || n.includes("trail") || n.includes("enduro")) return "🚵";
+  if (n.includes("gravel") || n.includes("cx") || n.includes("cyclocross")) return "🚵";
+  if (n.includes("e-bike") || n.includes("ebike") || n.includes("electric")) return "⚡";
+  return "🚴";
+}
+
+function BikeGaragePanel({ bikes }: { bikes: SummaryGear[] }) {
+  if (bikes.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 0", fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-dim)", letterSpacing: "0.06em" }}>
+        NO BIKES FOUND — ADD THEM IN STRAVA SETTINGS
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {bikes.map(bike => (
+        <div
+          key={bike.id}
+          style={{
+            background: "var(--color-surface)", border: "1px solid var(--color-border)",
+            borderRadius: 8, padding: "14px 16px",
+            boxShadow: "inset 0 3px 5px rgba(0,0,0,.125)",
+            display: "flex", alignItems: "center", gap: 14,
+          }}
+        >
+          <span style={{ fontSize: 28, flexShrink: 0 }} aria-hidden="true">{bikeEmoji(bike.name)}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {bike.name}
+              </span>
+              {bike.primary && (
+                <span style={{ fontFamily: "var(--font-ui)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "var(--color-orange)", border: "1px solid var(--color-orange)", borderRadius: 4, padding: "1px 5px", flexShrink: 0 }}>
+                  PRIMARY
+                </span>
+              )}
+            </div>
+            <div style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-muted)", fontVariantNumeric: "tabular-nums" }}>
+              {new Intl.NumberFormat("en", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(bike.distance / 1000)} km total
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Progress panel ───────────────────────────────────────────────── */
+function StatBlock({ label, totals }: { label: string; totals: { count: number; distance: number; moving_time: number; elevation_gain: number } }) {
+  if (totals.count === 0) return null;
+  return (
+    <>
+      <PanelSection label={label} />
+      <PanelRow label="Activities" value={totals.count.toLocaleString("en")} />
+      {totals.distance > 0 && (
+        <PanelRow label="Distance" value={`${new Intl.NumberFormat("en", { maximumFractionDigits: 0 }).format(totals.distance / 1000)} km`} />
+      )}
+      <PanelRow label="Moving Time" value={formatTime(totals.moving_time)} />
+      {totals.elevation_gain > 0 && (
+        <PanelRow label="Elevation" value={`${new Intl.NumberFormat("en", { maximumFractionDigits: 0 }).format(totals.elevation_gain)} m`} />
+      )}
+    </>
+  );
+}
+
+function ProgressPanel() {
+  const [stats, setStats] = useState<AthleteStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const year = new Date().getFullYear();
+
+  useEffect(() => {
+    fetch("/api/stats")
+      .then(r => r.json())
+      .then(setStats)
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <div style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-dim)", letterSpacing: "0.06em" }}>LOADING…</div>;
+  }
+  if (!stats) {
+    return <div style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-dim)" }}>Failed to load stats.</div>;
+  }
+
+  const ytdRide  = stats.ytd_ride_totals;
+  const ytdRun   = stats.ytd_run_totals;
+  const ytdSwim  = stats.ytd_swim_totals;
+  const allRide  = stats.all_ride_totals;
+  const allRun   = stats.all_run_totals;
+
+  return (
+    <div>
+      <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, color: "var(--color-text-muted)", letterSpacing: "0.06em", marginBottom: 4 }}>
+        {year} SEASON
+      </div>
+      <StatBlock label="🚴 RIDES" totals={ytdRide} />
+      <StatBlock label="🏃 RUNS" totals={ytdRun} />
+      <StatBlock label="🏊 SWIMS" totals={ytdSwim} />
+
+      {(allRide.count > 0 || allRun.count > 0) && (
+        <>
+          <div style={{ margin: "24px 0 0", borderTop: "1px solid var(--color-border)", paddingTop: 16, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, color: "var(--color-text-muted)", letterSpacing: "0.06em" }}>
+            ALL TIME
+          </div>
+          <StatBlock label="🚴 RIDES" totals={allRide} />
+          <StatBlock label="🏃 RUNS" totals={allRun} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Profile dropdown menu ────────────────────────────────────────── */
+type PanelId = "profile" | "settings" | "garage" | "progress";
+
+function ProfileMenu({ athlete, onOpen }: { athlete: StravaAthlete; onOpen: (id: PanelId) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const items: { id: PanelId; icon: React.ReactNode; label: string }[] = [
+    { id: "profile",  icon: <User size={14} aria-hidden="true" />,       label: "Profile" },
+    { id: "settings", icon: <Settings size={14} aria-hidden="true" />,   label: "Settings" },
+    { id: "garage",   icon: <Bike size={14} aria-hidden="true" />,       label: "Bike Garage" },
+    { id: "progress", icon: <TrendingUp size={14} aria-hidden="true" />, label: "Progress" },
+  ];
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        style={{
+          display: "flex", alignItems: "center", gap: 8,
+          background: "transparent", border: "none", cursor: "pointer", padding: "4px 8px",
+          borderRadius: 8, minWidth: 0,
+        }}
+      >
+        {athlete.profile_medium && (
+          <img
+            src={athlete.profile_medium}
+            alt={`${athlete.firstname} ${athlete.lastname}`}
+            width={28} height={28}
+            style={{ borderRadius: "50%", border: "2px solid var(--color-border)", flexShrink: 0 }}
+          />
+        )}
+        <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, maxWidth: 120 }}>
+          {athlete.firstname} {athlete.lastname}
+        </span>
+        <ChevronDown
+          size={12}
+          aria-hidden="true"
+          style={{ color: "var(--color-text-dim)", flexShrink: 0, transition: "transform 0.15s ease", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          style={{
+            position: "absolute", top: "calc(100% + 6px)", right: 0,
+            background: "var(--color-surface)", border: "1px solid var(--color-border)",
+            borderRadius: 8, padding: 4, minWidth: 180,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+            zIndex: 200,
+            animation: "fadeUp 0.15s ease-out forwards",
+          }}
+        >
+          {items.map(item => (
+            <button
+              key={item.id}
+              role="menuitem"
+              onClick={() => { setOpen(false); onOpen(item.id); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, width: "100%",
+                padding: "9px 12px", background: "transparent", border: "none",
+                borderRadius: 6, cursor: "pointer", textAlign: "left",
+                color: "var(--color-text-primary)",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-2)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >
+              <span style={{ color: "var(--color-text-muted)" }}>{item.icon}</span>
+              <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, letterSpacing: "0.04em" }}>
+                {item.label}
+              </span>
+            </button>
+          ))}
+
+          <div style={{ borderTop: "1px solid var(--color-border)", margin: "4px 0" }} />
+          <a
+            href="/api/auth/logout"
+            role="menuitem"
+            style={{
+              display: "flex", alignItems: "center", gap: 10, width: "100%",
+              padding: "9px 12px", background: "transparent",
+              borderRadius: 6, cursor: "pointer", textDecoration: "none",
+              color: "var(--color-text-dim)",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-2)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, letterSpacing: "0.04em" }}>Sign Out</span>
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ── Logo ─────────────────────────────────────────────────────────── */
 function StravaIcon({ size = 28 }: { size?: number }) {
@@ -427,6 +754,7 @@ function HomeContent() {
   const [error, setError] = useState<string | null>(null);
   const [direction, setDirection] = useState<"forward" | "backward">("forward");
   const [calendarKey, setCalendarKey] = useState(0);
+  const [panelOpen, setPanelOpen] = useState<PanelId | null>(null);
 
   // Sync week offset to/from URL param
   const weekOffset = Number(searchParams.get("week") ?? "0");
@@ -519,22 +847,7 @@ function HomeContent() {
           </span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {athlete && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-              {athlete.profile_medium && (
-                <img
-                  src={athlete.profile_medium}
-                  alt={`${athlete.firstname} ${athlete.lastname}`}
-                  width={28} height={28}
-                  style={{ borderRadius: "50%", border: "2px solid var(--color-border)", flexShrink: 0 }}
-                />
-              )}
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
-                {athlete.firstname} {athlete.lastname}
-              </span>
-            </div>
-          )}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
             onClick={loadActivities}
             aria-label="Refresh activities"
@@ -542,15 +855,15 @@ function HomeContent() {
           >
             <RefreshCw size={15} className={loading ? "animate-pulse" : ""} aria-hidden="true" />
           </button>
-          <a
-            href="/api/auth/logout"
-            style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-dim)", textDecoration: "none", letterSpacing: "0.06em" }}
-          >
-            <LogOut size={13} aria-hidden="true" />
-            SIGN OUT
-          </a>
+          {athlete && <ProfileMenu athlete={athlete} onOpen={setPanelOpen} />}
         </div>
       </nav>
+
+      {/* Panel overlays */}
+      {panelOpen === "profile"  && athlete && <Panel title="PROFILE"      onClose={() => setPanelOpen(null)}><ProfilePanel  athlete={athlete} /></Panel>}
+      {panelOpen === "settings" && athlete && <Panel title="SETTINGS"     onClose={() => setPanelOpen(null)}><SettingsPanel athlete={athlete} /></Panel>}
+      {panelOpen === "garage"   && athlete && <Panel title="BIKE GARAGE"  onClose={() => setPanelOpen(null)}><BikeGaragePanel bikes={athlete.bikes ?? []} /></Panel>}
+      {panelOpen === "progress"            && <Panel title="PROGRESS"     onClose={() => setPanelOpen(null)}><ProgressPanel /></Panel>}
 
       <main id="main" style={{ maxWidth: 960, margin: "0 auto", padding: "0 16px" }}>
         {/* Week header */}

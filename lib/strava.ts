@@ -35,8 +35,29 @@ export interface StravaAthlete {
   profile: string;
   city: string;
   country: string;
+  follower_count?: number;
+  friend_count?: number;
   bikes?: SummaryGear[];
   shoes?: SummaryGear[];
+}
+
+export interface ActivityTotals {
+  count: number;
+  distance: number;      // metres
+  moving_time: number;   // seconds
+  elevation_gain: number; // metres
+}
+
+export interface AthleteStats {
+  ytd_ride_totals: ActivityTotals;
+  ytd_run_totals: ActivityTotals;
+  ytd_swim_totals: ActivityTotals;
+  all_ride_totals: ActivityTotals;
+  all_run_totals: ActivityTotals;
+  all_swim_totals: ActivityTotals;
+  recent_ride_totals: ActivityTotals;
+  recent_run_totals: ActivityTotals;
+  recent_swim_totals: ActivityTotals;
 }
 
 export interface TokenData {
