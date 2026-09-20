@@ -230,6 +230,10 @@ function isGravelBike(name: string) {
   return /gravel|cx|cyclocross/i.test(name);
 }
 
+function isMTBike(name: string) {
+  return /mountain|mtb|trail|enduro/i.test(name);
+}
+
 function isRoadBike(name: string) {
   const n = name.toLowerCase();
   return !n.includes("mountain") && !n.includes("mtb") && !n.includes("trail") && !n.includes("enduro") &&
@@ -508,6 +512,159 @@ function OrbeaAvant53Diagram() {
   );
 }
 
+/* Orbea Oiz H — Size S-29 XC geometry diagram */
+function OrbeaOizSDiagram() {
+  // SVG coordinate constants (scale: 0.30 px/mm)
+  // Size S-29 XC: wheelbase=1094, stack=586, reach=407, BB drop=47, chainstay=435, fork=504
+  const RAx=55,  RAy=230, FAx=383, FAy=230;
+  const BBx=185, BBy=244;   // BB: 432mm fwd of RA, 47mm below axle
+  const STx=154, STy=127;   // seat tube top: 405mm @ 75°
+  const HTTx=307, HTTy=68;  // head tube top: stack=586, reach=407 from BB
+  const HTBx=317, HTBy=93;  // head tube bottom: 90mm @ 69°
+  const rw=110;              // 29" wheel radius (368mm * 0.30)
+  const dim="#fc5200";
+  const fr="#c8c8c8";
+  const ft="#727270";
+  const spokes = [0,45,90,135].map(a => a * Math.PI / 180);
+
+  return (
+    <div>
+      <svg viewBox="0 0 610 385" style={{ width:"100%", display:"block", marginBottom:16 }}
+        aria-label="Orbea Oiz H geometry diagram, Size S-29 XC">
+
+        {/* Axle-level reference */}
+        <line x1="0" y1={RAy} x2="450" y2={RAy} stroke="#252523" strokeWidth="1" strokeDasharray="3,7"/>
+
+        {/* Wheels */}
+        {([RAx, FAx] as number[]).map((cx, i) => (
+          <g key={i}>
+            <circle cx={cx} cy={RAy} r={rw} fill="none" stroke="#3e3e3c" strokeWidth="2"/>
+            {spokes.map(rad => (
+              <line key={rad}
+                x1={cx + rw*0.82*Math.cos(rad)} y1={RAy + rw*0.82*Math.sin(rad)}
+                x2={cx - rw*0.82*Math.cos(rad)} y2={RAy - rw*0.82*Math.sin(rad)}
+                stroke="#2c2c2a" strokeWidth="0.8"/>
+            ))}
+            <circle cx={cx} cy={RAy} r={5} fill="#3a3a38"/>
+          </g>
+        ))}
+
+        {/* Frame — back to front */}
+        {/* Chainstay */}
+        <line x1={BBx} y1={BBy} x2={RAx} y2={RAy} stroke={ft} strokeWidth="3" strokeLinecap="round"/>
+        {/* Seatstay */}
+        <line x1={RAx} y1={RAy} x2={STx} y2={STy} stroke={ft} strokeWidth="2.5" strokeLinecap="round"/>
+        {/* Suspension fork — slightly thicker to suggest fork legs */}
+        <line x1={HTBx+3} y1={HTBy} x2={FAx+2} y2={FAy} stroke={ft} strokeWidth="3.5" strokeLinecap="round"/>
+        <line x1={HTBx-1} y1={HTBy} x2={FAx-2} y2={FAy} stroke="#4a4a48" strokeWidth="2" strokeLinecap="round"/>
+        {/* Seat tube */}
+        <line x1={BBx} y1={BBy} x2={STx} y2={STy} stroke={fr} strokeWidth="4" strokeLinecap="round"/>
+        {/* Top tube */}
+        <line x1={STx} y1={STy} x2={HTTx} y2={HTTy} stroke={fr} strokeWidth="3.5" strokeLinecap="round"/>
+        {/* Down tube */}
+        <line x1={BBx} y1={BBy} x2={HTBx} y2={HTBy} stroke={fr} strokeWidth="4.5" strokeLinecap="round"/>
+        {/* Head tube */}
+        <line x1={HTTx} y1={HTTy} x2={HTBx} y2={HTBy} stroke={fr} strokeWidth="6" strokeLinecap="round"/>
+
+        {/* BB */}
+        <circle cx={BBx} cy={BBy} r={7} fill="#21211f" stroke={dim} strokeWidth="2"/>
+
+        {/* Saddle */}
+        <line x1={STx} y1={STy} x2={STx+2} y2={STy-10} stroke="#666" strokeWidth="2.5"/>
+        <line x1={STx-15} y1={STy-10} x2={STx+17} y2={STy-10} stroke="#888" strokeWidth="4" strokeLinecap="round"/>
+
+        {/* MTB riser bar */}
+        <line x1={HTTx+5} y1={HTTy} x2={313} y2={50} stroke="#666" strokeWidth="2.5" strokeLinecap="round"/>
+        {/* Bar sweep — wide flat bar with slight rise */}
+        <line x1={283} y1={44} x2={343} y2={44} stroke="#aaa" strokeWidth="4.5" strokeLinecap="round"/>
+        {/* Rise at outer ends */}
+        <line x1={283} y1={44} x2={280} y2={48} stroke="#888" strokeWidth="4" strokeLinecap="round"/>
+        <line x1={343} y1={44} x2={346} y2={48} stroke="#888" strokeWidth="4" strokeLinecap="round"/>
+
+        {/* === ANNOTATIONS === */}
+
+        {/* (7) Wheelbase */}
+        <line x1={RAx} y1={RAy} x2={RAx} y2={358} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={FAx} y1={FAy} x2={FAx} y2={358} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={RAx} y1={356} x2={FAx} y2={356} stroke={dim} strokeWidth="0.9"/>
+        <line x1={RAx} y1={353} x2={RAx} y2={359} stroke={dim} strokeWidth="1.2"/>
+        <line x1={FAx} y1={353} x2={FAx} y2={359} stroke={dim} strokeWidth="1.2"/>
+        <text x={(RAx+FAx)/2} y={371} textAnchor="middle" fontFamily="var(--font-ui)" fontSize="8.5" fill={dim} letterSpacing="0.04em">(7) 1 094 mm</text>
+
+        {/* (12) Stack */}
+        <line x1={BBx} y1={BBy} x2={476} y2={BBy} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={HTTx} y1={HTTy} x2={476} y2={HTTy} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={474} y1={BBy} x2={474} y2={HTTy} stroke={dim} strokeWidth="0.9"/>
+        <line x1={471} y1={BBy} x2={477} y2={BBy} stroke={dim} strokeWidth="1.2"/>
+        <line x1={471} y1={HTTy} x2={477} y2={HTTy} stroke={dim} strokeWidth="1.2"/>
+        <text x={482} y={(BBy+HTTy)/2+3} fontFamily="var(--font-ui)" fontSize="8.5" fill={dim} letterSpacing="0.04em">(12) 586 mm</text>
+
+        {/* (11) Reach */}
+        <line x1={BBx} y1={BBy} x2={BBx} y2={40} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={HTTx} y1={HTTy} x2={HTTx} y2={40} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={BBx} y1={42} x2={HTTx} y2={42} stroke={dim} strokeWidth="0.9"/>
+        <line x1={BBx} y1={39} x2={BBx} y2={45} stroke={dim} strokeWidth="1.2"/>
+        <line x1={HTTx} y1={39} x2={HTTx} y2={45} stroke={dim} strokeWidth="1.2"/>
+        <text x={(BBx+HTTx)/2} y={34} textAnchor="middle" fontFamily="var(--font-ui)" fontSize="8.5" fill={dim} letterSpacing="0.04em">(11) 407 mm</text>
+
+        {/* Number badges on tubes */}
+        {([
+          [163, 187, "1"],
+          [231, 103, "2"],
+          [294, 81,  "3"],
+          [121, 229, "4"],
+          [344, 162, "13"],
+        ] as [number,number,string][]).map(([x,y,num]) => (
+          <g key={num}>
+            <circle cx={x} cy={y} r={7.5} fill="#21211f" stroke={dim} strokeWidth="1.2"/>
+            <text x={x} y={y+3} textAnchor="middle" fontFamily="var(--font-ui)" fontSize={num.length > 1 ? "6" : "7.5"} fill={dim} fontWeight="700">{num}</text>
+          </g>
+        ))}
+
+        {/* Model label */}
+        <text x={502} y={175} fontFamily="var(--font-display)" fontSize="11" fill="#303030" fontWeight="700" letterSpacing="0.05em">ORBEA</text>
+        <text x={502} y={189} fontFamily="var(--font-display)" fontSize="11" fill="#303030" fontWeight="700" letterSpacing="0.05em">OIZ H</text>
+        <text x={502} y={202} fontFamily="var(--font-ui)" fontSize="8.5" fill="#262624" letterSpacing="0.09em">S-29 XC</text>
+      </svg>
+
+      {/* Size S-29 XC geometry */}
+      <PanelSection label="GEOMETRY — S-29 XC" />
+      <PanelRow label="Rider Height" value="155 – 170 cm" />
+      <PanelRow label="(1) Seat Tube C-T" value="405 mm" />
+      <PanelRow label="(2) Top Tube EFF" value="564 mm" />
+      <PanelRow label="(3) Head Tube" value="90 mm" />
+      <PanelRow label="(4) Chainstay" value="435 mm" />
+      <PanelRow label="(5) BB Height" value="327 mm" />
+      <PanelRow label="(6) BB Drop" value="47 mm" />
+      <PanelRow label="(7) Wheelbase" value="1 094 mm" />
+      <PanelRow label="(8) Head Angle" value="69°" />
+      <PanelRow label="(9) Seat Angle" value="75°" />
+      <PanelRow label="(10) Standover" value="732 mm" />
+      <PanelRow label="(11) Reach" value="407 mm" />
+      <PanelRow label="(12) Stack" value="586 mm" />
+      <PanelRow label="(13) Fork Length" value="504 mm" />
+
+      {/* Technical specs */}
+      <PanelSection label="TECHNICAL SPECS" />
+      <PanelRow label="Wheel Size" value={'29"'} />
+      <PanelRow label="Max Tyre" value="29 × 2.4" />
+      <PanelRow label="Fork Offset" value="44 mm" />
+      <PanelRow label="Rear Travel" value="100 mm" />
+      <PanelRow label="Fork Travel" value="100 mm" />
+      <PanelRow label="Seat Post Ø" value="31.6 mm" />
+      <PanelRow label="Seat Post Max Insert" value="215 mm" />
+      <PanelRow label="Rear Axle" value="Boost 148 × 12" />
+      <PanelRow label="BB" value="PressKit PF92" />
+
+      {/* Ergonomy — editable fit data */}
+      <PanelSection label="ERGONOMY" />
+      <EditablePanelRow label="Stem Length" defaultValue="50 mm" storageKey="fit_orbea_oiz_s_stem" />
+      <EditablePanelRow label="Handlebar Width" defaultValue="760 mm" storageKey="fit_orbea_oiz_s_bar_width" />
+      <EditablePanelRow label="Crank Length" defaultValue="170 mm" storageKey="fit_orbea_oiz_s_crank" />
+    </div>
+  );
+}
+
 function BikeGaragePanel({ bikes }: { bikes: SummaryGear[] }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [selectedBike, setSelectedBike] = useState<SummaryGear | null>(null);
@@ -551,6 +708,8 @@ function BikeGaragePanel({ bikes }: { bikes: SummaryGear[] }) {
         </div>
         {isGravelBike(selectedBike.name) ? (
           <CanyonGrailSmallDiagram />
+        ) : isMTBike(selectedBike.name) ? (
+          <OrbeaOizSDiagram />
         ) : isRoadBike(selectedBike.name) ? (
           <OrbeaAvant53Diagram />
         ) : (
