@@ -118,6 +118,20 @@ export interface TokenData {
   refresh_token: string;
   expires_at: number;
   athlete: StravaAthlete;
+  _client_n?: number; // which credential set (1 = default, 2 = secondary)
+}
+
+function clientCreds(n: number = 1): { clientId: string; clientSecret: string } {
+  if (n === 2) {
+    return {
+      clientId: process.env.STRAVA_CLIENT_ID_2!,
+      clientSecret: process.env.STRAVA_CLIENT_SECRET_2!,
+    };
+  }
+  return {
+    clientId: process.env.STRAVA_CLIENT_ID!,
+    clientSecret: process.env.STRAVA_CLIENT_SECRET!,
+  };
 }
 
 // Multi-profile cookie names
@@ -158,7 +172,7 @@ export async function resolveActiveProfile(
   let refreshed = false;
   if (Date.now() / 1000 > tokenData.expires_at - 300) {
     try {
-      const fresh = await refreshToken(tokenData.refresh_token);
+      const fresh = await refreshToken(tokenData.refresh_token, tokenData._client_n);
       tokenData = { ...tokenData, ...fresh, athlete: fresh.athlete ?? tokenData.athlete };
       profiles = profiles.map(p => p.athlete.id === tokenData!.athlete.id ? tokenData! : p);
       refreshed = true;
@@ -168,13 +182,14 @@ export async function resolveActiveProfile(
   return { tokenData, profiles, refreshed };
 }
 
-export async function exchangeCode(code: string): Promise<TokenData> {
+export async function exchangeCode(code: string, clientN: number = 1): Promise<TokenData> {
+  const { clientId, clientSecret } = clientCreds(clientN);
   const res = await fetch("https://www.strava.com/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      client_id: process.env.STRAVA_CLIENT_ID,
-      client_secret: process.env.STRAVA_CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       code,
       grant_type: "authorization_code",
     }),
@@ -183,19 +198,24 @@ export async function exchangeCode(code: string): Promise<TokenData> {
   return res.json();
 }
 
-export async function refreshToken(refresh_token: string): Promise<TokenData> {
+export async function refreshToken(refresh_token: string, clientN: number = 1): Promise<TokenData> {
+  const { clientId, clientSecret } = clientCreds(clientN);
   const res = await fetch("https://www.strava.com/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      client_id: process.env.STRAVA_CLIENT_ID,
-      client_secret: process.env.STRAVA_CLIENT_SECRET,
+      client_id: clientId,
+      client_secret: clientSecret,
       refresh_token,
       grant_type: "refresh_token",
     }),
   });
   if (!res.ok) throw new Error("Token refresh failed");
   return res.json();
+}
+
+export function clientIdForN(n: number = 1): string {
+  return clientCreds(n).clientId;
 }
 
 export async function fetchAthlete(accessToken: string): Promise<StravaAthlete> {

@@ -20,7 +20,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const tokenData = await exchangeCode(code);
+    // Read which credential set was used from the OAuth state param
+    const stateRaw = searchParams.get("state") ?? "";
+    const clientN = stateRaw.startsWith("n:") ? parseInt(stateRaw.slice(2), 10) : 1;
+
+    const tokenData = { ...await exchangeCode(code, clientN), _client_n: clientN };
     const cookieStore = await cookies();
 
     // Merge into profiles array (add or update by athlete ID)

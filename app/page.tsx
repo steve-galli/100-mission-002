@@ -927,6 +927,23 @@ function ProfileMenu({ athlete, onOpen }: { athlete: StravaAthlete; onOpen: (id:
 
           <div style={{ borderTop: "1px solid var(--color-border)", margin: "4px 0" }} />
           <a
+            href="/auth/add"
+            target="_blank"
+            rel="noopener noreferrer"
+            role="menuitem"
+            style={{
+              display: "flex", alignItems: "center", gap: 10, width: "100%",
+              padding: "9px 12px", background: "transparent",
+              borderRadius: 6, cursor: "pointer", textDecoration: "none",
+              color: "var(--color-text-primary)",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-2)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >
+            <Zap size={14} style={{ color: "var(--color-orange)" }} aria-hidden="true" />
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, letterSpacing: "0.04em" }}>Add Profile</span>
+          </a>
+          <a
             href="/api/auth/logout"
             role="menuitem"
             style={{
