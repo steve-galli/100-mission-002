@@ -97,9 +97,10 @@ export function getWeekRange(date: Date): { start: Date; end: Date } {
 export function formatDistance(metres: number, type: string): string {
   if (metres === 0) return "—";
   const swim = ["Swim", "OpenWaterSwim"].includes(type);
-  if (swim) return `${metres.toFixed(0)}m`;
+  if (swim) return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(metres)}m`;
   const km = metres / 1000;
-  return km >= 10 ? `${km.toFixed(1)}km` : `${km.toFixed(2)}km`;
+  const digits = km >= 10 ? 1 : 2;
+  return `${new Intl.NumberFormat(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(km)}km`;
 }
 
 export function formatTime(seconds: number): string {
@@ -128,7 +129,7 @@ export function formatPace(metres: number, seconds: number, type: string): strin
   }
   if (rides.includes(type)) {
     const kmh = (metres / 1000) / (seconds / 3600);
-    return `${kmh.toFixed(1)} km/h`;
+    return `${new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(kmh)} km/h`;
   }
   return "";
 }

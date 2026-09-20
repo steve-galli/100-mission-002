@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, LogOut, RefreshCw, Zap } from "lucide-react";
 import {
   StravaActivity,
@@ -20,13 +21,14 @@ import {
 } from "@/lib/strava";
 
 const DAY_LABELS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function formatWeekLabel(start: Date, end: Date) {
+  const fmt = (d: Date, opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("en", opts).format(d);
   if (start.getMonth() === end.getMonth()) {
-    return `${start.getDate()}–${end.getDate()} ${MONTHS[start.getMonth()]} ${start.getFullYear()}`;
+    return `${start.getDate()}–${end.getDate()} ${fmt(start, { month: "short" })} ${start.getFullYear()}`;
   }
-  return `${start.getDate()} ${MONTHS[start.getMonth()]} – ${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}`;
+  return `${start.getDate()} ${fmt(start, { month: "short" })} – ${end.getDate()} ${fmt(end, { month: "short" })} ${end.getFullYear()}`;
 }
 
 function isToday(date: Date) {
@@ -40,6 +42,23 @@ function isFuture(date: Date) {
   return date > now;
 }
 
+const prefersReducedMotion =
+  typeof window !== "undefined"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
+
+/* ── Logo ─────────────────────────────────────────────────────────── */
+function StravaIcon({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      {/* Two-chevron "S" mark approximating the Strava logomark */}
+      <path d="M20 4H32L44 26H30L20 4Z" fill="#fc5200" />
+      <path d="M16 26H30L22 44H10L16 26Z" fill="#fc5200" />
+    </svg>
+  );
+}
+
+/* ── Route background ─────────────────────────────────────────────── */
 function RouteBackground({ polyline, color }: { polyline: string; color: string }) {
   const points = decodePolyline(polyline);
   const path = pointsToSvgPath(points, 300, 180, 12);
@@ -48,27 +67,15 @@ function RouteBackground({ polyline, color }: { polyline: string; color: string 
     <svg
       viewBox="0 0 300 180"
       preserveAspectRatio="xMidYMid meet"
-      style={{
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        pointerEvents: "none",
-        opacity: 0.28,
-      }}
+      aria-hidden="true"
+      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", opacity: 0.28 }}
     >
-      <path
-        d={path}
-        fill="none"
-        stroke={color}
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d={path} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
+/* ── Activity card ────────────────────────────────────────────────── */
 function ActivityCard({ activity, index }: { activity: StravaActivity; index: number }) {
   const color = getSportColor(activity.sport_type || activity.type);
   const emoji = getSportEmoji(activity.sport_type || activity.type);
@@ -76,7 +83,7 @@ function ActivityCard({ activity, index }: { activity: StravaActivity; index: nu
 
   return (
     <div
-      className="animate-fade-up"
+      className="activity-card animate-fade-up"
       style={{
         animationDelay: `${index * 60}ms`,
         opacity: 0,
@@ -84,45 +91,30 @@ function ActivityCard({ activity, index }: { activity: StravaActivity; index: nu
         border: "1px solid var(--color-border)",
         borderRadius: 8,
         padding: "10px 12px",
-        borderLeft: `3px solid ${color}`,
         marginBottom: 6,
-        transition: "transform 0.15s ease-out, box-shadow 0.15s ease-out",
-        cursor: "default",
         position: "relative",
         overflow: "hidden",
-      }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
-        (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 12px rgba(0,0,0,0.3)`;
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLElement).style.transform = "";
-        (e.currentTarget as HTMLElement).style.boxShadow = "";
+        boxShadow: "inset 0 3px 5px rgba(0,0,0,.125)",
       }}
     >
+      {/* Colored left accent — clipped by overflow:hidden so it respects border-radius */}
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: color }} />
+
       {activity.map?.summary_polyline && (
         <RouteBackground polyline={activity.map.summary_polyline} color={color} />
       )}
 
-      {/* Sport + name */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-        <span style={{ fontSize: 14 }}>{emoji}</span>
+        <span aria-hidden="true" style={{ fontSize: 14 }}>{emoji}</span>
         <span style={{
-          fontFamily: "var(--font-display)",
-          fontWeight: 700,
-          fontSize: 13,
-          color: "var(--color-text-primary)",
-          lineHeight: 1.2,
-          flex: 1,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13,
+          color: "var(--color-text-primary)", lineHeight: 1.2,
+          flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {activity.name}
         </span>
       </div>
 
-      {/* Stats */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px" }}>
         {activity.distance > 0 && (
           <Stat label="DIST" value={formatDistance(activity.distance, activity.sport_type || activity.type)} />
@@ -140,17 +132,16 @@ function ActivityCard({ activity, index }: { activity: StravaActivity; index: nu
         )}
       </div>
 
-      {/* Kudos / achievements */}
       {(activity.kudos_count > 0 || activity.achievement_count > 0) && (
         <div style={{ display: "flex", gap: 8, marginTop: 5 }}>
           {activity.kudos_count > 0 && (
             <span style={{ fontSize: 10, color: "var(--color-text-muted)", fontFamily: "var(--font-ui)" }}>
-              👏 {activity.kudos_count}
+              <span aria-hidden="true">👏</span> {activity.kudos_count}
             </span>
           )}
           {activity.achievement_count > 0 && (
             <span style={{ fontSize: 10, color: "#fdb999", fontFamily: "var(--font-ui)" }}>
-              🏆 {activity.achievement_count}
+              <span aria-hidden="true">🏆</span> {activity.achievement_count}
             </span>
           )}
         </div>
@@ -159,41 +150,27 @@ function ActivityCard({ activity, index }: { activity: StravaActivity; index: nu
   );
 }
 
+/* ── Stat cell ────────────────────────────────────────────────────── */
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div>
-      <div style={{ fontSize: 9, color: "var(--color-text-dim)", fontFamily: "var(--font-ui)", fontWeight: 700, letterSpacing: "0.06em" }}>
+      <div style={{ fontSize: 11, color: "var(--color-text-dim)", fontFamily: "var(--font-ui)", fontWeight: 700, letterSpacing: "0.06em" }}>
         {label}
       </div>
-      <div style={{ fontSize: 12, color: color ?? "var(--color-text-primary)", fontFamily: "var(--font-ui)", fontWeight: 700 }}>
+      <div style={{ fontSize: 12, color: color ?? "var(--color-text-primary)", fontFamily: "var(--font-ui)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
         {value}
       </div>
     </div>
   );
 }
 
-function DayColumn({
-  dayIndex,
-  date,
-  activities,
-}: {
-  dayIndex: number;
-  date: Date;
-  activities: StravaActivity[];
-}) {
+/* ── Day column ───────────────────────────────────────────────────── */
+function DayColumn({ dayIndex, date, activities }: { dayIndex: number; date: Date; activities: StravaActivity[] }) {
   const today = isToday(date);
   const future = isFuture(date);
-  const hasActivity = activities.length > 0;
 
   return (
-    <div style={{
-      flex: 1,
-      minWidth: 0,
-      display: "flex",
-      flexDirection: "column",
-      gap: 6,
-    }}>
-      {/* Day header */}
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{
         padding: "8px 4px",
         borderBottom: `2px solid ${today ? "var(--color-orange)" : "var(--color-border)"}`,
@@ -201,48 +178,28 @@ function DayColumn({
         textAlign: "center",
       }}>
         <div style={{
-          fontFamily: "var(--font-ui)",
-          fontWeight: 700,
-          fontSize: 11,
-          letterSpacing: "0.1em",
+          fontFamily: "var(--font-ui)", fontWeight: 700, fontSize: 11, letterSpacing: "0.1em",
           color: today ? "var(--color-orange)" : future ? "var(--color-text-dim)" : "var(--color-text-muted)",
         }}>
           {DAY_LABELS[dayIndex]}
         </div>
         <div style={{
-          fontFamily: "var(--font-display)",
-          fontWeight: today ? 700 : 400,
-          fontSize: today ? 22 : 18,
+          fontFamily: "var(--font-display)", fontWeight: today ? 700 : 400, fontSize: today ? 22 : 18,
           color: today ? "var(--color-text-primary)" : future ? "var(--color-text-dim)" : "var(--color-text-muted)",
-          lineHeight: 1.1,
-          marginTop: 2,
+          lineHeight: 1.1, marginTop: 2, fontVariantNumeric: "tabular-nums",
         }}>
           {date.getDate()}
         </div>
       </div>
 
-      {/* Activities */}
-      {hasActivity ? (
+      {activities.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column" }}>
-          {activities.map((a, i) => (
-            <ActivityCard key={a.id} activity={a} index={i} />
-          ))}
+          {activities.map((a, i) => <ActivityCard key={a.id} activity={a} index={i} />)}
         </div>
       ) : (
-        <div style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "20px 4px",
-        }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 4px" }}>
           {!future && (
-            <span style={{
-              fontFamily: "var(--font-ui)",
-              fontSize: 10,
-              color: "var(--color-text-dim)",
-              letterSpacing: "0.06em",
-            }}>
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-dim)", letterSpacing: "0.06em" }}>
               REST
             </span>
           )}
@@ -252,47 +209,33 @@ function DayColumn({
   );
 }
 
+/* ── Suggestion row ───────────────────────────────────────────────── */
 function SuggestionRow({ activities, strain }: { activities: StravaActivity[]; strain: number }) {
   const suggestions = generateSuggestions(activities, strain);
   if (suggestions.length === 0) return null;
 
   const priorityColor: Record<string, string> = {
-    high: "var(--color-orange)",
-    medium: "#fdb999",
-    low: "var(--color-text-muted)",
+    high: "var(--color-orange)", medium: "#fdb999", low: "var(--color-text-muted)",
   };
 
   return (
-    <div style={{
-      display: "flex",
-      gap: 8,
-      flexWrap: "wrap",
-    }}>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {suggestions.map((s, i) => (
         <div
           key={i}
           className="animate-fade-up"
           style={{
-            animationDelay: `${i * 80}ms`,
-            opacity: 0,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
+            animationDelay: `${i * 80}ms`, opacity: 0,
+            display: "flex", alignItems: "center", gap: 8,
             background: "var(--color-surface)",
             border: `1px solid var(--color-border)`,
             borderLeft: `3px solid ${priorityColor[s.priority]}`,
-            borderRadius: 6,
-            padding: "8px 14px",
-            flex: "1 1 200px",
+            borderRadius: 6, padding: "8px 14px", flex: "1 1 200px",
+            boxShadow: "inset 0 3px 5px rgba(0,0,0,.125)",
           }}
         >
-          <span style={{ fontSize: 15, flexShrink: 0 }}>{s.icon}</span>
-          <span style={{
-            fontFamily: "var(--font-ui)",
-            fontSize: 12,
-            color: "var(--color-text-primary)",
-            lineHeight: 1.4,
-          }}>
+          <span aria-hidden="true" style={{ fontSize: 15, flexShrink: 0 }}>{s.icon}</span>
+          <span style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-primary)", lineHeight: 1.4 }}>
             {s.text}
           </span>
         </div>
@@ -301,6 +244,7 @@ function SuggestionRow({ activities, strain }: { activities: StravaActivity[]; s
   );
 }
 
+/* ── Strain gauge ─────────────────────────────────────────────────── */
 function StrainGauge({ score }: { score: number }) {
   const { label, color } = strainLabel(score);
   const radius = 34;
@@ -309,51 +253,35 @@ function StrainGauge({ score }: { score: number }) {
   const circumference = 2 * Math.PI * normalizedRadius;
   const progress = Math.min(score / 21, 1);
   const dashOffset = circumference * (1 - progress);
-  // Arc starts at top (−90°), goes clockwise
-  const rotation = -90;
+  const arcTransition = prefersReducedMotion ? undefined : "stroke-dashoffset 0.6s cubic-bezier(0,1.085,0.4,1), stroke 0.4s ease";
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-      {/* Divider */}
       <div style={{ width: 1, height: 52, background: "var(--color-border)", flexShrink: 0 }} />
-
-      <div style={{ position: "relative", width: radius * 2, height: radius * 2, flexShrink: 0 }}>
-        <svg width={radius * 2} height={radius * 2}>
-          {/* Track */}
+      <div
+        role="meter"
+        aria-label="Weekly strain"
+        aria-valuenow={score}
+        aria-valuemin={0}
+        aria-valuemax={21}
+        style={{ position: "relative", width: radius * 2, height: radius * 2, flexShrink: 0 }}
+      >
+        <svg width={radius * 2} height={radius * 2} aria-hidden="true">
+          <circle cx={radius} cy={radius} r={normalizedRadius} fill="none" stroke="var(--color-surface-2)" strokeWidth={stroke} />
           <circle
             cx={radius} cy={radius} r={normalizedRadius}
-            fill="none" stroke="var(--color-surface-2)" strokeWidth={stroke}
-          />
-          {/* Progress arc */}
-          <circle
-            cx={radius} cy={radius} r={normalizedRadius}
-            fill="none"
-            stroke={color}
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={dashOffset}
-            transform={`rotate(${rotation} ${radius} ${radius})`}
-            style={{ transition: "stroke-dashoffset 0.6s ease-out, stroke 0.4s ease" }}
+            fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
+            strokeDasharray={circumference} strokeDashoffset={dashOffset}
+            transform={`rotate(-90 ${radius} ${radius})`}
+            style={{ transition: arcTransition }}
           />
         </svg>
-        {/* Score in centre */}
-        <div style={{
-          position: "absolute", inset: 0,
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          gap: 0,
-        }}>
-          <span style={{
-            fontFamily: "var(--font-display)", fontWeight: 700,
-            fontSize: score >= 10 ? 16 : 18, color,
-            lineHeight: 1,
-          }}>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: score >= 10 ? 16 : 18, color, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
             {score.toFixed(1)}
           </span>
         </div>
       </div>
-
       <div>
         <div style={{ fontSize: 9, color: "var(--color-text-dim)", fontFamily: "var(--font-ui)", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>
           WEEKLY STRAIN
@@ -361,51 +289,33 @@ function StrainGauge({ score }: { score: number }) {
         <div style={{ fontSize: 13, color, fontFamily: "var(--font-display)", fontWeight: 700, letterSpacing: "0.04em" }}>
           {label}
         </div>
-        <div style={{ marginTop: 4, width: 80, height: 3, background: "var(--color-surface-2)", borderRadius: 2, overflow: "hidden" }}>
-          <div style={{
-            width: `${progress * 100}%`, height: "100%",
-            background: color, borderRadius: 2,
-            transition: "width 0.6s ease-out",
-          }} />
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
-          <span style={{ fontSize: 8, color: "var(--color-text-dim)", fontFamily: "var(--font-ui)" }}>0</span>
-          <span style={{ fontSize: 8, color: "var(--color-text-dim)", fontFamily: "var(--font-ui)" }}>21</span>
-        </div>
       </div>
     </div>
   );
 }
 
+/* ── Week summary ─────────────────────────────────────────────────── */
 function WeekSummary({ activities }: { activities: StravaActivity[] }) {
   const totalDist = activities.reduce((s, a) => s + a.distance, 0);
   const totalTime = activities.reduce((s, a) => s + a.moving_time, 0);
   const totalElev = activities.reduce((s, a) => s + a.total_elevation_gain, 0);
   const activeDays = new Set(activities.map(a => a.start_date_local.slice(0, 10))).size;
   const strain = calculateWeeklyStrain(activities);
-
   const sports: Record<string, number> = {};
-  activities.forEach(a => {
-    const t = a.sport_type || a.type;
-    sports[t] = (sports[t] ?? 0) + 1;
-  });
+  activities.forEach(a => { const t = a.sport_type || a.type; sports[t] = (sports[t] ?? 0) + 1; });
 
   return (
     <div style={{
-      background: "var(--color-surface)",
-      border: "1px solid var(--color-border)",
-      borderRadius: 8,
-      padding: "14px 20px",
-      display: "flex",
-      gap: 28,
-      alignItems: "center",
-      flexWrap: "wrap",
-      justifyContent: "space-between",
+      background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8,
+      padding: "14px 20px", display: "flex", gap: 28, alignItems: "center", flexWrap: "wrap",
+      justifyContent: "space-between", boxShadow: "inset 0 3px 5px rgba(0,0,0,.125)",
     }}>
       <div style={{ display: "flex", gap: 28, alignItems: "center", flexWrap: "wrap" }}>
         <SummaryItem label="ACTIVITIES" value={activities.length.toString()} accent />
         <SummaryItem label="ACTIVE DAYS" value={activeDays.toString()} />
-        {totalDist > 0 && <SummaryItem label="TOTAL DIST" value={`${(totalDist / 1000).toFixed(1)}km`} />}
+        {totalDist > 0 && (
+          <SummaryItem label="TOTAL DIST" value={`${new Intl.NumberFormat("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(totalDist / 1000)}km`} />
+        )}
         <SummaryItem label="TOTAL TIME" value={formatTime(totalTime)} />
         {totalElev > 0 && <SummaryItem label="ELEVATION" value={`${Math.round(totalElev)}m`} />}
         {Object.entries(sports).map(([type, count]) => (
@@ -423,71 +333,44 @@ function SummaryItem({ label, value, accent }: { label: string; value: string; a
       <div style={{ fontSize: 9, color: "var(--color-text-dim)", fontFamily: "var(--font-ui)", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>
         {label}
       </div>
-      <div style={{ fontSize: 20, color: accent ? "var(--color-orange)" : "var(--color-text-primary)", fontFamily: "var(--font-display)", fontWeight: 700, lineHeight: 1 }}>
+      <div style={{ fontSize: 20, color: accent ? "var(--color-orange)" : "var(--color-text-primary)", fontFamily: "var(--font-display)", fontWeight: 700, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
         {value}
       </div>
     </div>
   );
 }
 
+/* ── Login screen ─────────────────────────────────────────────────── */
 function LoginScreen({ error }: { error: string | null }) {
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "var(--color-bg)",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 32,
-      padding: 24,
-    }}>
-      {/* Logo */}
+    <div style={{ minHeight: "100vh", background: "var(--color-bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 32, padding: 24 }}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-          <path d="M24 4L30 20H44L32 30L36 46L24 36L12 46L16 30L4 20H18L24 4Z" fill="#fc5200" />
-        </svg>
-        <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 36, color: "var(--color-text-primary)", letterSpacing: "-0.01em" }}>
+        <StravaIcon size={48} />
+        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 36, color: "var(--color-text-primary)", letterSpacing: "-0.01em", textWrap: "balance" } as React.CSSProperties}>
           STRAVA WEEK
-        </div>
-        <div style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--color-text-muted)", letterSpacing: "0.08em" }}>
+        </h1>
+        <p style={{ fontFamily: "var(--font-ui)", fontSize: 14, color: "var(--color-text-muted)", letterSpacing: "0.08em" }}>
           YOUR PERSONAL ACTIVITY CALENDAR
-        </div>
+        </p>
       </div>
 
       {error && (
-        <div style={{
-          background: "rgba(223,38,38,0.12)",
-          border: "1px solid #df2626",
-          borderRadius: 8,
-          padding: "10px 16px",
-          fontFamily: "var(--font-ui)",
-          fontSize: 13,
-          color: "#df2626",
-        }}>
+        <div role="alert" style={{ background: "rgba(223,38,38,0.12)", border: "1px solid #df2626", borderRadius: 8, padding: "10px 16px", fontFamily: "var(--font-ui)", fontSize: 13, color: "#df2626" }}>
           {error === "denied" ? "Authorization was denied. Please try again." : "Something went wrong. Please try again."}
         </div>
       )}
 
-      <a href="/api/auth" style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        background: "var(--color-orange)",
-        color: "white",
-        textDecoration: "none",
-        padding: "14px 28px",
-        borderRadius: 8,
-        fontFamily: "var(--font-display)",
-        fontWeight: 700,
-        fontSize: 16,
-        letterSpacing: "0.04em",
-        transition: "opacity 0.15s ease-out",
-      }}
-        onMouseEnter={e => (e.currentTarget.style.opacity = "0.88")}
-        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+      <a
+        href="/api/auth"
+        className="cta-btn"
+        style={{
+          display: "flex", alignItems: "center", gap: 12,
+          background: "var(--color-orange)", color: "white", textDecoration: "none",
+          padding: "14px 28px", borderRadius: 8,
+          fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, letterSpacing: "0.04em",
+        }}
       >
-        <Zap size={18} />
+        <Zap size={18} aria-hidden="true" />
         CONNECT WITH STRAVA
       </a>
 
@@ -498,20 +381,30 @@ function LoginScreen({ error }: { error: string | null }) {
   );
 }
 
-export default function Home() {
+/* ── Main app (needs Suspense for useSearchParams) ────────────────── */
+function HomeContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [activities, setActivities] = useState<StravaActivity[]>([]);
   const [athlete, setAthlete] = useState<StravaAthlete | null>(null);
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-  const [weekOffset, setWeekOffset] = useState(0); // 0 = current week
   const [error, setError] = useState<string | null>(null);
+  const [direction, setDirection] = useState<"forward" | "backward">("forward");
+  const [calendarKey, setCalendarKey] = useState(0);
 
-  const targetDate = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + weekOffset * 7);
-    return d;
-  })();
+  // Sync week offset to/from URL param
+  const weekOffset = Number(searchParams.get("week") ?? "0");
 
+  const setWeekOffset = useCallback((updater: number | ((prev: number) => number)) => {
+    const next = typeof updater === "function" ? updater(weekOffset) : updater;
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === 0) { params.delete("week"); } else { params.set("week", String(next)); }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }, [weekOffset, router, searchParams]);
+
+  const targetDate = (() => { const d = new Date(); d.setDate(d.getDate() + weekOffset * 7); return d; })();
   const { start: weekStart, end: weekEnd } = getWeekRange(targetDate);
 
   const loadActivities = useCallback(async () => {
@@ -533,16 +426,26 @@ export default function Home() {
 
   useEffect(() => { loadActivities(); }, [loadActivities]);
 
-  // Check for error param from OAuth redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const e = params.get("error");
     if (e) setError(e);
   }, []);
 
+  const goWeek = useCallback((delta: number) => {
+    setDirection(delta < 0 ? "backward" : "forward");
+    setCalendarKey(k => k + 1);
+    setWeekOffset(w => w + delta);
+  }, [setWeekOffset]);
+
+  const goToday = useCallback(() => {
+    setDirection(weekOffset < 0 ? "forward" : "backward");
+    setCalendarKey(k => k + 1);
+    setWeekOffset(0);
+  }, [weekOffset, setWeekOffset]);
+
   if (authed === false) return <LoginScreen error={error} />;
 
-  // Build 7-day columns
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(weekStart.getDate() + i);
@@ -557,26 +460,23 @@ export default function Home() {
   });
 
   const isCurrentWeek = weekOffset === 0;
+  const weekLabel = isCurrentWeek ? "THIS WEEK" : formatWeekLabel(weekStart, weekEnd).toUpperCase();
+  const activityCount = activities.length;
+  const calendarClass = `calendar-grid ${direction === "forward" ? "calendar-enter-forward" : "calendar-enter-backward"}`;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)", padding: "0 0 48px" }}>
-      {/* Top nav */}
-      <nav style={{
-        borderBottom: "1px solid var(--color-border)",
-        padding: "12px 24px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        position: "sticky",
-        top: 0,
-        background: "rgba(0,0,0,0.92)",
-        backdropFilter: "blur(8px)",
-        zIndex: 100,
-      }}>
+      <nav
+        aria-label="Site navigation"
+        style={{
+          borderBottom: "1px solid var(--color-border)",
+          padding: "12px 24px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          position: "sticky", top: 0, background: "var(--color-bg)", zIndex: 100,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <svg width="28" height="28" viewBox="0 0 48 48" fill="none">
-            <path d="M24 4L30 20H44L32 30L36 46L24 36L12 46L16 30L4 20H18L24 4Z" fill="#fc5200" />
-          </svg>
+          <StravaIcon size={28} />
           <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 18, color: "var(--color-text-primary)", letterSpacing: "0.02em" }}>
             STRAVA WEEK
           </span>
@@ -584,144 +484,95 @@ export default function Home() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {athlete && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
               {athlete.profile_medium && (
                 <img
                   src={athlete.profile_medium}
-                  alt=""
-                  style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--color-border)" }}
+                  alt={`${athlete.firstname} ${athlete.lastname}`}
+                  width={28} height={28}
+                  style={{ borderRadius: "50%", border: "2px solid var(--color-border)", flexShrink: 0 }}
                 />
               )}
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--color-text-muted)" }}>
+              <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
                 {athlete.firstname} {athlete.lastname}
               </span>
             </div>
           )}
           <button
             onClick={loadActivities}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "var(--color-text-dim)",
-              cursor: "pointer",
-              padding: 4,
-              display: "flex",
-              alignItems: "center",
-              transition: "color 0.15s",
-            }}
-            title="Refresh"
-            onMouseEnter={e => (e.currentTarget.style.color = "var(--color-text-primary)")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-dim)")}
+            aria-label="Refresh activities"
+            style={{ background: "transparent", border: "none", color: "var(--color-text-dim)", cursor: "pointer", padding: 4, display: "flex", alignItems: "center" }}
           >
-            <RefreshCw size={15} className={loading ? "animate-pulse" : ""} />
+            <RefreshCw size={15} className={loading ? "animate-pulse" : ""} aria-hidden="true" />
           </button>
           <a
             href="/api/auth/logout"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontFamily: "var(--font-ui)",
-              fontSize: 12,
-              color: "var(--color-text-dim)",
-              textDecoration: "none",
-              letterSpacing: "0.06em",
-              transition: "color 0.15s",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.color = "var(--color-text-primary)")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-dim)")}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-dim)", textDecoration: "none", letterSpacing: "0.06em" }}
           >
-            <LogOut size={13} />
+            <LogOut size={13} aria-hidden="true" />
             SIGN OUT
           </a>
         </div>
       </nav>
 
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 16px" }}>
+      <main id="main" style={{ maxWidth: 960, margin: "0 auto", padding: "0 16px" }}>
         {/* Week header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 0 16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <button
-              onClick={() => setWeekOffset(w => w - 1)}
-              style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-                color: "var(--color-text-primary)",
-                borderRadius: 6,
-                width: 32,
-                height: 32,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                transition: "border-color 0.15s",
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-orange)")}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)")}
+              onClick={() => goWeek(-1)}
+              aria-label="Previous week"
+              style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)", borderRadius: 6, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={16} aria-hidden="true" />
             </button>
 
             <div>
-              <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, color: "var(--color-text-primary)", lineHeight: 1.1 }}>
-                {isCurrentWeek ? "THIS WEEK" : formatWeekLabel(weekStart, weekEnd).toUpperCase()}
-              </div>
+              <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 22, color: "var(--color-text-primary)", lineHeight: 1.1, textWrap: "balance" } as React.CSSProperties}>
+                {weekLabel}
+              </h1>
               {isCurrentWeek && (
-                <div style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>
+                <div suppressHydrationWarning style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>
                   {formatWeekLabel(weekStart, weekEnd)}
                 </div>
               )}
             </div>
 
             <button
-              onClick={() => setWeekOffset(w => w + 1)}
+              onClick={() => goWeek(1)}
               disabled={weekOffset >= 0}
+              aria-label="Next week"
               style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
+                background: "var(--color-surface)", border: "1px solid var(--color-border)",
                 color: weekOffset >= 0 ? "var(--color-text-dim)" : "var(--color-text-primary)",
-                borderRadius: 6,
-                width: 32,
-                height: 32,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: weekOffset >= 0 ? "default" : "pointer",
-                opacity: weekOffset >= 0 ? 0.4 : 1,
-                transition: "border-color 0.15s",
+                borderRadius: 6, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: weekOffset >= 0 ? "default" : "pointer", opacity: weekOffset >= 0 ? 0.4 : 1,
               }}
-              onMouseEnter={e => { if (weekOffset < 0) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-orange)"; }}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)")}
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={16} aria-hidden="true" />
             </button>
 
             {weekOffset !== 0 && (
               <button
-                onClick={() => setWeekOffset(0)}
+                onClick={goToday}
+                className="animate-fade-up"
                 style={{
-                  background: "transparent",
-                  border: "1px solid var(--color-border)",
-                  color: "var(--color-orange)",
-                  borderRadius: 6,
-                  padding: "4px 12px",
-                  fontFamily: "var(--font-ui)",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  cursor: "pointer",
-                  transition: "border-color 0.15s",
+                  background: "transparent", border: "1px solid var(--color-border)", color: "var(--color-orange)",
+                  borderRadius: 6, padding: "4px 12px", fontFamily: "var(--font-ui)", fontSize: 11,
+                  fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer",
                 }}
-                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-orange)")}
-                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)")}
               >
                 TODAY
               </button>
             )}
           </div>
 
-          <div style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-dim)", letterSpacing: "0.06em" }}>
-            {loading ? "LOADING..." : `${activities.length} ACTIVIT${activities.length !== 1 ? "IES" : "Y"}`}
+          <div
+            aria-live="polite"
+            aria-atomic="true"
+            style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-dim)", letterSpacing: "0.06em" }}
+          >
+            {loading ? "LOADING…" : `${activityCount} ACTIVIT${activityCount !== 1 ? "IES" : "Y"}`}
           </div>
         </div>
 
@@ -733,60 +584,43 @@ export default function Home() {
           </div>
         )}
 
-        {/* Calendar grid */}
+        {/* Calendar grid — scrollable on mobile */}
         {loading ? (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(7, 1fr)",
-            gap: 8,
-            minHeight: 300,
-          }}>
-            {Array.from({ length: 7 }).map((_, i) => (
-              <div key={i} style={{
-                background: "var(--color-surface)",
-                borderRadius: 8,
-                height: 200,
-                border: "1px solid var(--color-border)",
-                animation: "pulse 2s ease-in-out infinite",
-                animationDelay: `${i * 100}ms`,
-              }} />
-            ))}
+          <div className="calendar-scroll">
+            <div className="calendar-grid" aria-busy="true" aria-label="Loading activities">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} style={{ background: "var(--color-surface)", borderRadius: 8, height: 200, border: "1px solid var(--color-border)", animation: "pulse 2s ease-in-out infinite", animationDelay: `${i * 100}ms` }} />
+              ))}
+            </div>
           </div>
         ) : (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(7, 1fr)",
-            gap: 8,
-            alignItems: "start",
-          }}>
-            {days.map((date, i) => {
-              // Use local date parts to avoid UTC offset shifting the day (e.g. BST midnight → UTC previous day)
-              const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-              return (
-                <DayColumn
-                  key={key}
-                  dayIndex={i}
-                  date={date}
-                  activities={activitiesByDay[key] ?? []}
-                />
-              );
-            })}
+          <div className="calendar-scroll">
+            <div key={calendarKey} className={calendarClass}>
+              {days.map((date, i) => {
+                const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                return (
+                  <DayColumn key={key} dayIndex={i} date={date} activities={activitiesByDay[key] ?? []} />
+                );
+              })}
+            </div>
           </div>
         )}
 
         {!loading && activities.length === 0 && authed && (
-          <div style={{
-            textAlign: "center",
-            padding: "60px 0",
-            color: "var(--color-text-dim)",
-            fontFamily: "var(--font-ui)",
-            fontSize: 13,
-            letterSpacing: "0.06em",
-          }}>
-            NO ACTIVITIES THIS WEEK — REST UP 💤
+          <div style={{ textAlign: "center", padding: "60px 0", color: "var(--color-text-dim)", fontFamily: "var(--font-ui)", fontSize: 13, letterSpacing: "0.06em" }}>
+            NO ACTIVITIES THIS WEEK — REST UP
           </div>
         )}
-      </div>
+      </main>
     </div>
+  );
+}
+
+/* ── Root export (Suspense required for useSearchParams) ──────────── */
+export default function Home() {
+  return (
+    <Suspense>
+      <HomeContent />
+    </Suspense>
   );
 }

@@ -1,27 +1,26 @@
 @import "tailwindcss";
 
-/* Strava Boathouse fonts from CDN */
 @font-face {
   font-family: "Boathouse";
-  src: url("https://strava-web-assets.s3.amazonaws.com/assets/fonts/Boathouse/Static/Boathouse-Bold-Oblique.woff2") format("woff2");
+  src: url("/fonts/Boathouse-700.woff2") format("woff2");
   font-weight: 700;
   font-display: swap;
 }
 @font-face {
   font-family: "Boathouse";
-  src: url("https://strava-web-assets.s3.amazonaws.com/assets/fonts/Boathouse/Static/Boathouse-Regular-Oblique.woff2") format("woff2");
+  src: url("/fonts/Boathouse-Regular.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: "BoathouseCondensed";
-  src: url("https://strava-web-assets.s3.amazonaws.com/assets/fonts/Boathouse/Static/Boathouse-Condensed-Bold-Oblique.woff2") format("woff2");
+  src: url("/fonts/BoathouseCondensed-700.woff2") format("woff2");
   font-weight: 700;
   font-display: swap;
 }
 @font-face {
   font-family: "BoathouseCondensed";
-  src: url("https://strava-web-assets.s3.amazonaws.com/assets/fonts/Boathouse/Static/Boathouse-Condensed-Regular-Oblique.woff2") format("woff2");
+  src: url("/fonts/BoathouseCondensed-Regular.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
@@ -41,6 +40,7 @@
   --color-teal: #129398;
   --font-display: "Boathouse", system-ui, sans-serif;
   --font-ui: "BoathouseCondensed", system-ui, sans-serif;
+  color-scheme: dark;
 }
 
 * {
@@ -55,24 +55,100 @@ body {
   font-family: var(--font-ui);
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
+button, a {
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--color-orange);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 4px;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--color-orange);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  border-radius: 6px;
+  text-decoration: none;
+}
+.skip-link:focus {
+  left: 4px;
+}
+
+/* CTA button hover (login screen) */
+.cta-btn {
+  transition: opacity 0.15s ease-out;
+}
+.cta-btn:hover {
+  opacity: 0.88;
+}
+
+/* Activity card hover */
+.activity-card {
+  transition: transform 0.15s ease-out;
+  cursor: default;
+}
+.activity-card:hover {
+  transform: translateY(-1px);
+}
+
+/* Calendar week transitions */
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.calendar-enter-forward {
+  animation: slideInRight 0.25s cubic-bezier(0, 1.085, 0.4, 1) forwards;
+}
+.calendar-enter-backward {
+  animation: slideInLeft 0.25s cubic-bezier(0, 1.085, 0.4, 1) forwards;
+}
+
+/* Skeleton pulse */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50%       { opacity: 0.5; }
 }
 
 .animate-fade-up {
-  animation: fadeUp 0.3s ease-out forwards;
+  animation: fadeUp 0.3s cubic-bezier(0, 1.085, 0.4, 1) forwards;
 }
-
 .animate-pulse {
   animation: pulse 2s ease-in-out infinite;
+}
+
+/* Responsive calendar grid */
+.calendar-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(140px, 1fr));
+  gap: 8px;
+  align-items: start;
+  min-width: 700px;
 }
 
 @media (prefers-reduced-motion: reduce) {
