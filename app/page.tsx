@@ -67,7 +67,7 @@ function Panel({ title, onClose, children }: { title: string; onClose: () => voi
       onClose();
       return;
     }
-    gsap.to(panelRef.current, { x: 320, duration: 0.2, ease: "power2.in" });
+    gsap.to(panelRef.current, { x: 480, duration: 0.2, ease: "power2.in" });
     gsap.to(backdropRef.current, { opacity: 0, duration: 0.18, onComplete: onClose });
   }, [onClose]);
 
@@ -83,7 +83,7 @@ function Panel({ title, onClose, children }: { title: string; onClose: () => voi
       return;
     }
     gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2 });
-    gsap.fromTo(panelRef.current, { x: 320 }, { x: 0, duration: 0.3, ease: "power3.out", onComplete: () => ScrollTrigger.refresh() });
+    gsap.fromTo(panelRef.current, { x: 480 }, { x: 0, duration: 0.3, ease: "power3.out", onComplete: () => ScrollTrigger.refresh() });
   }, []); // eslint-disable-line
 
   return (
@@ -94,7 +94,7 @@ function Panel({ title, onClose, children }: { title: string; onClose: () => voi
         role="dialog"
         aria-label={title}
         style={{
-          position: "fixed", top: 0, right: 0, bottom: 0, width: 320,
+          position: "fixed", top: 0, right: 0, bottom: 0, width: 480,
           background: "var(--color-bg)", borderLeft: "1px solid var(--color-border)",
           zIndex: 301, display: "flex", flexDirection: "column",
         }}
@@ -135,6 +135,36 @@ function PanelRow({ label, value }: { label: string; value: string }) {
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid var(--color-border)" }}>
       <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-muted)", letterSpacing: "0.04em" }}>{label}</span>
       <span style={{ fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>{value}</span>
+    </div>
+  );
+}
+
+function EditablePanelRow({ label, defaultValue, storageKey }: { label: string; defaultValue: string; storageKey: string }) {
+  const [val, setVal] = useState(defaultValue);
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(storageKey);
+    if (stored !== null) setVal(stored);
+  }, [storageKey]);
+
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "6px 0", borderBottom: "1px solid var(--color-border)" }}>
+      <span style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-muted)", letterSpacing: "0.04em" }}>{label}</span>
+      <input
+        value={val}
+        onChange={e => { setVal(e.target.value); localStorage.setItem(storageKey, e.target.value); }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          background: "transparent", border: "none",
+          borderBottom: `1px solid ${focused ? "var(--color-orange)" : "var(--color-border)"}`,
+          color: "var(--color-text-primary)", fontFamily: "var(--font-ui)", fontSize: 13,
+          fontWeight: 700, fontVariantNumeric: "tabular-nums", textAlign: "right",
+          width: 130, padding: "0 2px", outline: "none", cursor: "text",
+          transition: "border-color 0.15s",
+        }}
+      />
     </div>
   );
 }
@@ -196,18 +226,301 @@ function bikeEmoji(name: string): string {
   return "🚴";
 }
 
+function isGravelBike(name: string) {
+  return /gravel|cx|cyclocross/i.test(name);
+}
+
+function isRoadBike(name: string) {
+  const n = name.toLowerCase();
+  return !n.includes("mountain") && !n.includes("mtb") && !n.includes("trail") && !n.includes("enduro") &&
+    !n.includes("gravel") && !n.includes("cx") && !n.includes("cyclocross") &&
+    !n.includes("e-bike") && !n.includes("ebike") && !n.includes("electric") &&
+    !n.includes("commute") && !n.includes("city") && !n.includes("cargo");
+}
+
+/* Canyon Grail 7 — Size S geometry diagram */
+function CanyonGrailSmallDiagram() {
+  // SVG coordinate constants (scale: 0.30 px/mm)
+  // Rear axle origin, all points derived from actual geometry
+  const RAx=55, RAy=235, FAx=363, FAy=235;
+  const BBx=182, BBy=258;   // BB: 423mm fwd of RA, 75mm below axle
+  const STx=140, STy=116;   // seat tube top: 492mm @ 73.5°
+  const HTTx=299, HTTy=91;  // head tube top: stack=556, reach=390 from BB
+  const HTBx=311, HTBy=126; // head tube bottom: 124mm @ 70.75°
+  const rw=107;              // wheel radius: 355mm * 0.30
+  const dim="#fc5200";
+  const fr="#c8c8c8";
+  const ft="#727270";
+  const spokes = [0,45,90,135].map(a => a * Math.PI / 180);
+
+  return (
+    <div>
+      <svg viewBox="0 0 560 372" style={{ width:"100%", display:"block", marginBottom:16 }}
+        aria-label="Canyon Grail 7 geometry diagram, Size S">
+
+        {/* Axle-level reference */}
+        <line x1="0" y1={RAy} x2="430" y2={RAy} stroke="#252523" strokeWidth="1" strokeDasharray="3,7"/>
+
+        {/* Wheels */}
+        {([RAx, FAx] as number[]).map((cx, i) => (
+          <g key={i}>
+            <circle cx={cx} cy={RAy} r={rw} fill="none" stroke="#3e3e3c" strokeWidth="2"/>
+            {spokes.map(rad => (
+              <line key={rad}
+                x1={cx + rw*0.82*Math.cos(rad)} y1={RAy + rw*0.82*Math.sin(rad)}
+                x2={cx - rw*0.82*Math.cos(rad)} y2={RAy - rw*0.82*Math.sin(rad)}
+                stroke="#2c2c2a" strokeWidth="0.8"/>
+            ))}
+            <circle cx={cx} cy={RAy} r={5} fill="#3a3a38"/>
+          </g>
+        ))}
+
+        {/* Frame — back to front */}
+        <line x1={BBx} y1={BBy} x2={RAx} y2={RAy} stroke={ft} strokeWidth="3" strokeLinecap="round"/>
+        <line x1={RAx} y1={RAy} x2={STx} y2={STy} stroke={ft} strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1={HTBx} y1={HTBy} x2={FAx} y2={FAy} stroke={ft} strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1={BBx} y1={BBy} x2={STx} y2={STy} stroke={fr} strokeWidth="4" strokeLinecap="round"/>
+        <line x1={STx} y1={STy} x2={HTTx} y2={HTTy} stroke={fr} strokeWidth="3.5" strokeLinecap="round"/>
+        <line x1={BBx} y1={BBy} x2={HTBx} y2={HTBy} stroke={fr} strokeWidth="4.5" strokeLinecap="round"/>
+        <line x1={HTTx} y1={HTTy} x2={HTBx} y2={HTBy} stroke={fr} strokeWidth="6" strokeLinecap="round"/>
+
+        {/* BB */}
+        <circle cx={BBx} cy={BBy} r={7} fill="#21211f" stroke={dim} strokeWidth="2"/>
+
+        {/* Saddle */}
+        <line x1={STx} y1={STy} x2={STx+2} y2={STy-10} stroke="#666" strokeWidth="2.5"/>
+        <line x1={STx-15} y1={STy-10} x2={STx+17} y2={STy-10} stroke="#888" strokeWidth="4" strokeLinecap="round"/>
+
+        {/* Canyon Grail Hover Bar (double-decker) */}
+        <line x1={HTTx+5} y1={HTTy} x2={318} y2={HTTy-10} stroke="#666" strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1={301} y1={HTTy-18} x2={345} y2={HTTy-18} stroke="#aaa" strokeWidth="4" strokeLinecap="round"/>
+        <line x1={301} y1={HTTy-18} x2={297} y2={HTTy-7} stroke="#888" strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1={345} y1={HTTy-18} x2={349} y2={HTTy-7} stroke="#888" strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1={297} y1={HTTy-7} x2={349} y2={HTTy-7} stroke="#888" strokeWidth="2.5" strokeLinecap="round"/>
+
+        {/* === ANNOTATIONS === */}
+
+        {/* (h) Wheelbase */}
+        <line x1={RAx} y1={RAy} x2={RAx} y2={356} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={FAx} y1={FAy} x2={FAx} y2={356} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={RAx} y1={354} x2={FAx} y2={354} stroke={dim} strokeWidth="0.9"/>
+        <line x1={RAx} y1={351} x2={RAx} y2={357} stroke={dim} strokeWidth="1.2"/>
+        <line x1={FAx} y1={351} x2={FAx} y2={357} stroke={dim} strokeWidth="1.2"/>
+        <text x={(RAx+FAx)/2} y={368} textAnchor="middle" fontFamily="var(--font-ui)" fontSize="8.5" fill={dim} letterSpacing="0.04em">(h) 1 027 mm</text>
+
+        {/* (i) Stack */}
+        <line x1={BBx} y1={BBy} x2={444} y2={BBy} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={HTTx} y1={HTTy} x2={444} y2={HTTy} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={442} y1={BBy} x2={442} y2={HTTy} stroke={dim} strokeWidth="0.9"/>
+        <line x1={439} y1={BBy} x2={445} y2={BBy} stroke={dim} strokeWidth="1.2"/>
+        <line x1={439} y1={HTTy} x2={445} y2={HTTy} stroke={dim} strokeWidth="1.2"/>
+        <text x={450} y={(BBy+HTTy)/2+3} fontFamily="var(--font-ui)" fontSize="8.5" fill={dim} letterSpacing="0.04em">(i) 556 mm</text>
+
+        {/* (j) Reach */}
+        <line x1={BBx} y1={BBy} x2={BBx} y2={57} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={HTTx} y1={HTTy} x2={HTTx} y2={57} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={BBx} y1={59} x2={HTTx} y2={59} stroke={dim} strokeWidth="0.9"/>
+        <line x1={BBx} y1={56} x2={BBx} y2={62} stroke={dim} strokeWidth="1.2"/>
+        <line x1={HTTx} y1={56} x2={HTTx} y2={62} stroke={dim} strokeWidth="1.2"/>
+        <text x={(BBx+HTTx)/2} y={51} textAnchor="middle" fontFamily="var(--font-ui)" fontSize="8.5" fill={dim} letterSpacing="0.04em">(j) 390 mm</text>
+
+        {/* Letter badges on tubes */}
+        {([
+          [155, 190, "b"],
+          [220, 113, "c"],
+          [290, 111, "d"],
+          [119, 238, "g"],
+        ] as [number,number,string][]).map(([x,y,ltr]) => (
+          <g key={ltr}>
+            <circle cx={x} cy={y} r={7} fill="#21211f" stroke={dim} strokeWidth="1.2"/>
+            <text x={x} y={y+3} textAnchor="middle" fontFamily="var(--font-ui)" fontSize="7.5" fill={dim} fontWeight="700">{ltr}</text>
+          </g>
+        ))}
+
+        {/* Model label */}
+        <text x={472} y={190} fontFamily="var(--font-display)" fontSize="11" fill="#303030" fontWeight="700" letterSpacing="0.05em">CANYON</text>
+        <text x={472} y={204} fontFamily="var(--font-display)" fontSize="11" fill="#303030" fontWeight="700" letterSpacing="0.05em">GRAIL 7</text>
+        <text x={472} y={217} fontFamily="var(--font-ui)" fontSize="8.5" fill="#262624" letterSpacing="0.09em">SIZE S</text>
+      </svg>
+
+      {/* Size S basic geometry */}
+      <PanelSection label="BASIC GEOMETRY — SIZE S" />
+      <PanelRow label="Rider Height" value="172 – 178 cm" />
+      <PanelRow label="(a) Seat Height" value="655 – 775 mm" />
+      <PanelRow label="(b) Seat Tube" value="492 mm" />
+      <PanelRow label="(c) Top Tube" value="555 mm" />
+      <PanelRow label="(d) Head Tube" value="124 mm" />
+      <PanelRow label="(e) Head Tube Angle" value="70.75°" />
+      <PanelRow label="(f) Seat Tube Angle" value="73.5°" />
+      <PanelRow label="(g) Chainstay" value="430 mm" />
+      <PanelRow label="(h) Wheelbase" value="1 027 mm" />
+      <PanelRow label="(i) Stack" value="556 mm" />
+      <PanelRow label="(j) Reach" value="390 mm" />
+      <PanelRow label="(k) Stand-over" value="781 mm" />
+      <PanelRow label="(l) BB Offset" value="75 mm" />
+      <PanelRow label="Stack+" value="647 mm" />
+      <PanelRow label="Reach+" value="447 mm" />
+
+      {/* Size S component geometry — editable fit data */}
+      <PanelSection label="COMPONENTS — SIZE S" />
+      <PanelRow label="Spacer" value="27.5 mm" />
+      <EditablePanelRow label="Stem" defaultValue="80 mm" storageKey="fit_canyon_grail_s_stem" />
+      <EditablePanelRow label="Handlebar Width" defaultValue="420 mm" storageKey="fit_canyon_grail_s_bar_width" />
+      <EditablePanelRow label="Crank Length" defaultValue="170 mm" storageKey="fit_canyon_grail_s_crank" />
+      <PanelRow label="Chainring" value="46 / 30" />
+      <PanelRow label="Seat Post Ø" value="27.2 mm" />
+      <EditablePanelRow label="Seat Post Length" defaultValue="345 mm" storageKey="fit_canyon_grail_s_seatpost" />
+      <PanelRow label="Wheel Size" value={'28"'} />
+      <PanelRow label="Disc Size" value="160 / 160 mm" />
+    </div>
+  );
+}
+
+/* Orbea Avant — Size 53 geometry diagram */
+function OrbeaAvant53Diagram() {
+  // SVG coordinate constants (scale: 0.30 px/mm)
+  // Size 53: wheelbase=992, stack=572, reach=378, BB drop=73, chainstay=415
+  const RAx=55,  RAy=235, FAx=353, FAy=235;
+  const BBx=178, BBy=257;   // BB: 408mm fwd of RA, 73mm below axle
+  const STx=136, STy=116;   // seat tube top: 490mm @ 73.5°
+  const HTTx=291, HTTy=85;  // head tube top: stack=572, reach=378 from BB
+  const HTBx=305, HTBy=130; // head tube bottom: 158mm @ 72.4°
+  const rw=107;
+  const dim="#fc5200";
+  const fr="#c8c8c8";
+  const ft="#727270";
+  const spokes = [0,45,90,135].map(a => a * Math.PI / 180);
+
+  return (
+    <div>
+      <svg viewBox="0 0 560 372" style={{ width:"100%", display:"block", marginBottom:16 }}
+        aria-label="Orbea Avant geometry diagram, Size 53">
+
+        {/* Axle-level reference */}
+        <line x1="0" y1={RAy} x2="430" y2={RAy} stroke="#252523" strokeWidth="1" strokeDasharray="3,7"/>
+
+        {/* Wheels */}
+        {([RAx, FAx] as number[]).map((cx, i) => (
+          <g key={i}>
+            <circle cx={cx} cy={RAy} r={rw} fill="none" stroke="#3e3e3c" strokeWidth="2"/>
+            {spokes.map(rad => (
+              <line key={rad}
+                x1={cx + rw*0.82*Math.cos(rad)} y1={RAy + rw*0.82*Math.sin(rad)}
+                x2={cx - rw*0.82*Math.cos(rad)} y2={RAy - rw*0.82*Math.sin(rad)}
+                stroke="#2c2c2a" strokeWidth="0.8"/>
+            ))}
+            <circle cx={cx} cy={RAy} r={5} fill="#3a3a38"/>
+          </g>
+        ))}
+
+        {/* Frame — back to front */}
+        <line x1={BBx} y1={BBy} x2={RAx} y2={RAy} stroke={ft} strokeWidth="3" strokeLinecap="round"/>
+        <line x1={RAx} y1={RAy} x2={STx} y2={STy} stroke={ft} strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1={HTBx} y1={HTBy} x2={FAx} y2={FAy} stroke={ft} strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1={BBx} y1={BBy} x2={STx} y2={STy} stroke={fr} strokeWidth="4" strokeLinecap="round"/>
+        <line x1={STx} y1={STy} x2={HTTx} y2={HTTy} stroke={fr} strokeWidth="3.5" strokeLinecap="round"/>
+        <line x1={BBx} y1={BBy} x2={HTBx} y2={HTBy} stroke={fr} strokeWidth="4.5" strokeLinecap="round"/>
+        <line x1={HTTx} y1={HTTy} x2={HTBx} y2={HTBy} stroke={fr} strokeWidth="6" strokeLinecap="round"/>
+
+        {/* BB */}
+        <circle cx={BBx} cy={BBy} r={7} fill="#21211f" stroke={dim} strokeWidth="2"/>
+
+        {/* Saddle */}
+        <line x1={STx} y1={STy} x2={STx+2} y2={STy-10} stroke="#666" strokeWidth="2.5"/>
+        <line x1={STx-15} y1={STy-10} x2={STx+17} y2={STy-10} stroke="#888" strokeWidth="4" strokeLinecap="round"/>
+
+        {/* Road drop bar */}
+        <line x1={HTTx+5} y1={HTTy} x2={318} y2={77} stroke="#666" strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1={298} y1={74} x2={338} y2={74} stroke="#aaa" strokeWidth="4" strokeLinecap="round"/>
+        <path d="M 298,74 Q 294,88 294,97 Q 296,106 303,106" fill="none" stroke="#888" strokeWidth="2.5" strokeLinecap="round"/>
+        <path d="M 338,74 Q 342,88 342,97 Q 340,106 333,106" fill="none" stroke="#888" strokeWidth="2.5" strokeLinecap="round"/>
+
+        {/* === ANNOTATIONS === */}
+
+        {/* (7) Wheelbase */}
+        <line x1={RAx} y1={RAy} x2={RAx} y2={356} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={FAx} y1={FAy} x2={FAx} y2={356} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={RAx} y1={354} x2={FAx} y2={354} stroke={dim} strokeWidth="0.9"/>
+        <line x1={RAx} y1={351} x2={RAx} y2={357} stroke={dim} strokeWidth="1.2"/>
+        <line x1={FAx} y1={351} x2={FAx} y2={357} stroke={dim} strokeWidth="1.2"/>
+        <text x={(RAx+FAx)/2} y={368} textAnchor="middle" fontFamily="var(--font-ui)" fontSize="8.5" fill={dim} letterSpacing="0.04em">(7) 992 mm</text>
+
+        {/* (12) Stack */}
+        <line x1={BBx} y1={BBy} x2={444} y2={BBy} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={HTTx} y1={HTTy} x2={444} y2={HTTy} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={442} y1={BBy} x2={442} y2={HTTy} stroke={dim} strokeWidth="0.9"/>
+        <line x1={439} y1={BBy} x2={445} y2={BBy} stroke={dim} strokeWidth="1.2"/>
+        <line x1={439} y1={HTTy} x2={445} y2={HTTy} stroke={dim} strokeWidth="1.2"/>
+        <text x={450} y={(BBy+HTTy)/2+3} fontFamily="var(--font-ui)" fontSize="8.5" fill={dim} letterSpacing="0.04em">(12) 572 mm</text>
+
+        {/* (11) Reach */}
+        <line x1={BBx} y1={BBy} x2={BBx} y2={57} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={HTTx} y1={HTTy} x2={HTTx} y2={57} stroke={dim} strokeWidth="0.5" strokeDasharray="2,4" opacity="0.55"/>
+        <line x1={BBx} y1={59} x2={HTTx} y2={59} stroke={dim} strokeWidth="0.9"/>
+        <line x1={BBx} y1={56} x2={BBx} y2={62} stroke={dim} strokeWidth="1.2"/>
+        <line x1={HTTx} y1={56} x2={HTTx} y2={62} stroke={dim} strokeWidth="1.2"/>
+        <text x={(BBx+HTTx)/2} y={51} textAnchor="middle" fontFamily="var(--font-ui)" fontSize="8.5" fill={dim} letterSpacing="0.04em">(11) 378 mm</text>
+
+        {/* Number badges on tubes */}
+        {([
+          [150, 188, "1"],
+          [214, 107, "2"],
+          [281, 107, "3"],
+          [116, 238, "4"],
+          [323, 180, "13"],
+        ] as [number,number,string][]).map(([x,y,num]) => (
+          <g key={num}>
+            <circle cx={x} cy={y} r={7.5} fill="#21211f" stroke={dim} strokeWidth="1.2"/>
+            <text x={x} y={y+3} textAnchor="middle" fontFamily="var(--font-ui)" fontSize={num.length > 1 ? "6" : "7.5"} fill={dim} fontWeight="700">{num}</text>
+          </g>
+        ))}
+
+        {/* Model label */}
+        <text x={462} y={190} fontFamily="var(--font-display)" fontSize="11" fill="#303030" fontWeight="700" letterSpacing="0.05em">ORBEA</text>
+        <text x={462} y={204} fontFamily="var(--font-display)" fontSize="11" fill="#303030" fontWeight="700" letterSpacing="0.05em">AVANT</text>
+        <text x={462} y={217} fontFamily="var(--font-ui)" fontSize="8.5" fill="#262624" letterSpacing="0.09em">SIZE 53</text>
+      </svg>
+
+      {/* Size 53 geometry */}
+      <PanelSection label="GEOMETRY — SIZE 53" />
+      <PanelRow label="Rider Height" value="173 – 179 cm" />
+      <PanelRow label="(1) Seat Tube C-T" value="490 mm" />
+      <PanelRow label="(2) Top Tube EFF" value="547 mm" />
+      <PanelRow label="(3) Head Tube" value="158 mm" />
+      <PanelRow label="(4) Chainstay" value="415 mm" />
+      <PanelRow label="(5) BB Height" value="272 mm" />
+      <PanelRow label="(6) BB Drop" value="73 mm" />
+      <PanelRow label="(7) Wheelbase" value="992 mm" />
+      <PanelRow label="(8) Head Angle" value="72.4°" />
+      <PanelRow label="(9) Seat Angle" value="73.5°" />
+      <PanelRow label="(10) Standover" value="793 mm" />
+      <PanelRow label="(11) Reach" value="378 mm" />
+      <PanelRow label="(12) Stack" value="572 mm" />
+      <PanelRow label="(13) Fork Length" value="380 mm" />
+      <PanelRow label="(14) Rake" value="45 mm" />
+
+      {/* Ergonomy — editable fit data */}
+      <PanelSection label="ERGONOMY — SIZE 53" />
+      <EditablePanelRow label="Crank Length" defaultValue="172.5 mm" storageKey="fit_orbea_avant_53_crank" />
+      <EditablePanelRow label="Handlebar Width" defaultValue="420 mm" storageKey="fit_orbea_avant_53_bar_width" />
+      <EditablePanelRow label="Stem Length" defaultValue="110 mm" storageKey="fit_orbea_avant_53_stem" />
+    </div>
+  );
+}
+
 function BikeGaragePanel({ bikes }: { bikes: SummaryGear[] }) {
   const listRef = useRef<HTMLDivElement>(null);
+  const [selectedBike, setSelectedBike] = useState<SummaryGear | null>(null);
 
   useGSAP(() => {
-    if (!bikes.length || prefersReducedMotion) return;
+    if (selectedBike || !bikes.length || prefersReducedMotion) return;
     const scroller = document.querySelector(".panel-scroll") as HTMLElement;
     if (!scroller) return;
     gsap.from(".bike-card", {
       opacity: 0, y: 10, scale: 0.96, stagger: 0.08, duration: 0.4, ease: "power2.out",
       scrollTrigger: { trigger: listRef.current, scroller, start: "top 90%", once: true },
     });
-  }, { scope: listRef, dependencies: [bikes.length] });
+  }, { scope: listRef, dependencies: [bikes.length, selectedBike] });
 
   if (bikes.length === 0) {
     return (
@@ -216,15 +529,51 @@ function BikeGaragePanel({ bikes }: { bikes: SummaryGear[] }) {
       </div>
     );
   }
+
+  if (selectedBike) {
+    return (
+      <div>
+        <button
+          onClick={() => setSelectedBike(null)}
+          onMouseEnter={e => !prefersReducedMotion && gsap.to(e.currentTarget, { x: -3, duration: 0.12, ease: "power2.out" })}
+          onMouseLeave={e => !prefersReducedMotion && gsap.to(e.currentTarget, { x: 0, duration: 0.1, ease: "power2.out" })}
+          style={{ background: "transparent", border: "none", color: "var(--color-text-muted)", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-ui)", fontSize: 11,
+            fontWeight: 700, letterSpacing: "0.06em", padding: "0 0 16px", marginBottom: 4 }}
+        >
+          ← BACK
+        </button>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, color: "var(--color-text-primary)", marginBottom: 3 }}>
+          {selectedBike.name}
+        </div>
+        <div style={{ fontFamily: "var(--font-ui)", fontSize: 11, color: "var(--color-text-muted)", fontVariantNumeric: "tabular-nums", marginBottom: 20 }}>
+          {new Intl.NumberFormat("en", { maximumFractionDigits: 0 }).format(selectedBike.distance / 1000)} km total
+        </div>
+        {isGravelBike(selectedBike.name) ? (
+          <CanyonGrailSmallDiagram />
+        ) : isRoadBike(selectedBike.name) ? (
+          <OrbeaAvant53Diagram />
+        ) : (
+          <div style={{ fontFamily: "var(--font-ui)", fontSize: 12, color: "var(--color-text-dim)", padding: "24px 0", textAlign: "center", letterSpacing: "0.06em" }}>
+            NO GEOMETRY DIAGRAM AVAILABLE
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div ref={listRef} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {bikes.map(bike => (
         <div
           key={bike.id}
           className="bike-card"
+          onClick={() => setSelectedBike(bike)}
+          onMouseEnter={e => !prefersReducedMotion && gsap.to(e.currentTarget, { y: -2, duration: 0.14, ease: "power2.out" })}
+          onMouseLeave={e => !prefersReducedMotion && gsap.to(e.currentTarget, { y: 0, duration: 0.12, ease: "power2.out" })}
           style={{
             background: "var(--color-surface)", border: "1px solid var(--color-border)",
-            borderRadius: 8, padding: "14px 16px",
+            borderRadius: 8, padding: "14px 16px", cursor: "pointer",
             boxShadow: "inset 0 3px 5px rgba(0,0,0,.125)",
             display: "flex", alignItems: "center", gap: 14,
           }}
@@ -245,6 +594,7 @@ function BikeGaragePanel({ bikes }: { bikes: SummaryGear[] }) {
               {new Intl.NumberFormat("en", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(bike.distance / 1000)} km total
             </div>
           </div>
+          <span style={{ color: "var(--color-text-dim)", flexShrink: 0 }}>›</span>
         </div>
       ))}
     </div>
